@@ -194,11 +194,6 @@ function SVGTree({ root, subtree, hasCycle, cyclePath }) {
   const treeW = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.x)) + NODE_W + PAD * 2 : 200;
   const treeH = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.y)) + NODE_H + PAD * 2 : 100;
 
-  function onWheel(e) {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setTransform(prev => ({ ...prev, scale: Math.max(0.3, Math.min(3, prev.scale * delta)) }));
-  }
   function onMouseDown(e) {
     if (e.target.closest(".svg-node-group")) return;
     setDragging(true);
@@ -256,7 +251,6 @@ function SVGTree({ root, subtree, hasCycle, cyclePath }) {
         className="svg-tree"
         width={canvasW}
         height={canvasH}
-        onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}

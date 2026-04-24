@@ -349,7 +349,7 @@ button{width:fit-content;border:none;border-radius:8px;padding:.5rem .9rem;font-
 .fallback-header{margin-bottom:.3rem}
 
 /* ═══ SVG TREE ═══ */
-.svg-tree-wrapper{position:relative;border-radius:6px;background:var(--code-bg);border:1px solid var(--border);overflow:auto;max-height:320px}
+.svg-tree-wrapper{position:relative;border-radius:6px;background:var(--code-bg);border:1px solid var(--border);overflow:auto;max-height:320px;padding-top:2.2rem}
 .svg-tree{display:block}
 .svg-edge{fill:none;stroke:var(--accent);stroke-width:1.5;opacity:.4}
 .svg-node-group{cursor:pointer}
@@ -358,8 +358,8 @@ button{width:fit-content;border:none;border-radius:8px;padding:.5rem .9rem;font-
 .svg-node-rect.inspected{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2;filter:drop-shadow(0 0 6px var(--accent-glow))}
 .svg-node-group:hover .svg-node-rect{fill:var(--accent-soft);stroke:var(--accent);filter:drop-shadow(0 0 6px var(--accent-glow))}
 .svg-node-label{fill:var(--text);font-family:var(--font-mono);font-size:13px;font-weight:700}
-.svg-tree-controls{position:sticky;bottom:.35rem;float:right;margin-right:.35rem;display:flex;gap:1px;background:var(--surface2);
-  border:1px solid var(--border-mid);border-radius:5px;overflow:hidden;z-index:2}
+.svg-tree-controls{position:absolute;top:.35rem;right:.35rem;display:flex;gap:1px;background:var(--surface2);
+  border:1px solid var(--border-mid);border-radius:5px;overflow:hidden;z-index:3}
 .svg-tree-controls button{background:transparent;color:var(--text-sec);border:none;border-radius:0;width:26px;height:26px;
   font-size:.8rem;display:grid;place-items:center;cursor:pointer;transition:var(--fast);padding:0}
 .svg-tree-controls button:hover{background:var(--glass-hover);color:var(--text)}
