@@ -1,0 +1,16 @@
+{
+  "name": "srm-full-stack-backend",
+  "version": "1.0.0",
+  "description": "Express backend for the SRM Full Stack Engineering Challenge.",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test:sample": "node scripts/runSample.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}
