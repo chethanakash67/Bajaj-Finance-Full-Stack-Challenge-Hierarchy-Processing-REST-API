@@ -57,21 +57,6 @@ const USER_PROFILE = {
   college_roll_number: "RA2311028010059",
 };
 
-function formatDisplayName(name) {
-  return name
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-const NAV_ITEMS = [
-  { key: "dashboard", label: "Dashboard", targetId: "dashboard-section" },
-  { key: "hidden-tests", label: "Hidden Tests", targetId: "hidden-tests-section" },
-  { key: "validation", label: "Validation", targetId: "validation-section" },
-  { key: "deployment", label: "Deployment", targetId: "deployment-section" },
-];
-
 function parseEdges(rawText) {
   if (rawText.trim().length === 0) {
     return [];
@@ -122,19 +107,28 @@ function formatJson(response) {
   return JSON.stringify(response, null, 2);
 }
 
+function formatDisplayName(name) {
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function TreeDiagramNode({ nodeName, subtree }) {
   const children = Object.entries(subtree);
 
   return (
-    <div className={`tree-diagram-node ${children.length > 0 ? "has-children" : ""}`}>
-      <div className="tree-badge">
-        <span className="tree-dot" />
-        <span className="tree-label">{nodeName}</span>
+    <div className={`branch-node ${children.length > 0 ? "has-children" : ""}`}>
+      <div className="branch-badge">
+        <span className="branch-core" />
+        <span className="branch-label">{nodeName}</span>
       </div>
       {children.length > 0 ? (
-        <div className="tree-diagram-children">
+        <div className="branch-children">
           {children.map(([childName, childTree]) => (
-            <div className="tree-diagram-child" key={childName}>
+            <div className="branch-child" key={childName}>
               <TreeDiagramNode nodeName={childName} subtree={childTree} />
             </div>
           ))}
@@ -152,7 +146,6 @@ export default function HomePage() {
   const [response, setResponse] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copyToast, setCopyToast] = useState("");
-  const [activeNav, setActiveNav] = useState("dashboard");
 
   const parsedLines = parseEdges(input);
   const liveAnalysis = analyzeInput(parsedLines);
@@ -162,7 +155,7 @@ export default function HomePage() {
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (totalParsedLines === 0 || (totalParsedLines === 1 && parsedLines[0] === "")) {
+    if (totalParsedLines === 0) {
       setError("400: Please enter at least one edge before submitting.");
       setStatus("No request sent.");
       setResponse(null);
@@ -192,7 +185,7 @@ export default function HomePage() {
       }
 
       setResponse(payload);
-      setStatus("Response received successfully.");
+      setStatus("Analysis complete.");
     } catch (submitError) {
       setError(
         submitError.message === "Failed to fetch"
@@ -235,142 +228,93 @@ export default function HomePage() {
     setStatus(INITIAL_STATUS);
   }
 
-  function handleNavClick(item) {
-    setActiveNav(item.key);
-    const element = document.getElementById(item.targetId);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
-
   const summaryCards = response
     ? [
-        ["UID", formatDisplayName(response.user_id.replace(/_/g, " ")), "Identity tag"],
+        ["Identity", formatDisplayName(response.user_id.replace(/_/g, " ")), "Submission owner"],
         ["Trees", response.summary.total_trees, "Valid non-cyclic groups"],
         ["Cycles", response.summary.total_cycles, "Cyclic components"],
-        ["Largest", response.summary.largest_tree_root ?? "N/A", "Greatest depth root"],
+        ["Largest Root", response.summary.largest_tree_root ?? "N/A", "Greatest depth root"],
       ]
     : [
-        ["UID", formatDisplayName(USER_PROFILE.user_id), "Identity tag"],
+        ["Identity", formatDisplayName(USER_PROFILE.user_id), "Submission owner"],
         ["Trees", 0, "Valid non-cyclic groups"],
         ["Cycles", 0, "Cyclic components"],
-        ["Largest", "N/A", "Greatest depth root"],
+        ["Largest Root", "N/A", "Greatest depth root"],
       ];
 
   const displayedInvalidEntries = response ? response.invalid_entries : liveAnalysis.invalidEntries;
   const displayedDuplicateEdges = response ? response.duplicate_edges : liveAnalysis.duplicateEdges;
 
   return (
-    <main className="dashboard-shell">
-      <aside className="sidebar">
-        <div>
-          <div className="brand-mark">BF</div>
-          <nav className="nav-list">
-            {NAV_ITEMS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`nav-item ${activeNav === item.key ? "active" : ""}`}
-                onClick={() => handleNavClick(item)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
+    <main className="studio-shell">
+      <section className="studio-hero">
+        <div className="hero-copy-block">
+          <p className="eyebrow">SRM Full Stack Engineering Challenge</p>
+          <h1>Graph Atlas</h1>
+          <p className="hero-text">
+            A bright, editorial-style graph workspace for validating edge inputs, mapping hierarchies,
+            isolating cyclic components, and reviewing the exact API response before submission.
+          </p>
         </div>
 
-        <div className="sidebar-stack" id="deployment-section">
-          <div className="sidebar-note">
-            <p className="sidebar-label">Hosted API URL</p>
-            <p className="sidebar-value break-text">{API_BASE_URL}</p>
-            <p className="sidebar-caption">POST /bfhl</p>
-          </div>
-          <div className="sidebar-note">
-            <p className="sidebar-label">Hosted Frontend URL</p>
-            <p className="sidebar-value break-text">{FRONTEND_URL}</p>
-          </div>
-          <div className="sidebar-note">
-            <p className="sidebar-label">GitHub Repo</p>
-            <a className="sidebar-link break-text" href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
-              {GITHUB_REPO_URL}
-            </a>
-          </div>
-          <div className="sidebar-note profile-note">
-            <p className="sidebar-label">User Profile</p>
-            <p className="sidebar-value">{USER_PROFILE.user_id}</p>
-            <p className="sidebar-caption">{USER_PROFILE.email_id}</p>
-            <p className="sidebar-caption">{USER_PROFILE.college_roll_number}</p>
-          </div>
-        </div>
-      </aside>
-
-      <section className="dashboard-main">
-        <header className="topbar">
-          <div className="topbar-search">
-            <span className="search-icon">o</span>
-            <span>{API_BASE_URL}</span>
-          </div>
-          <div className="topbar-badge">Evaluator Ready</div>
-        </header>
-
-        <section className="hero-strip" id="dashboard-section">
-          <div>
-            <p className="eyebrow">SRM Full Stack Engineering Challenge</p>
-            <h1>Hierarchy Intelligence Dashboard</h1>
-            <p className="hero-copy">
-              Submit graph edges, preview validation before the request, inspect cycle-safe hierarchy cards,
-              and copy the exact API payload used for evaluation.
-            </p>
-          </div>
-          <div className="hero-stats">
-            <div className="mini-stat">
-              <span className="mini-label">Parsed Lines</span>
+        <div className="hero-panel">
+          <div className="hero-kpis">
+            <div className="hero-kpi">
+              <span>Parsed Lines</span>
               <strong>{totalParsedLines}</strong>
             </div>
-            <div className="mini-stat">
-              <span className="mini-label">Status</span>
+            <div className="hero-kpi">
+              <span>Status</span>
               <strong>{isLoading ? "Running" : "Idle"}</strong>
             </div>
           </div>
-        </section>
+          <div className="hero-links">
+            <span className="hero-link-tag">API {API_BASE_URL}</span>
+            <span className="hero-link-tag">Web {FRONTEND_URL}</span>
+          </div>
+        </div>
+      </section>
 
-        <section className="dashboard-grid">
-          <article className="panel compose-panel" id="hidden-tests-section">
-            <div className="panel-header">
-              <div>
-                <p className="panel-kicker">Input Console</p>
-                <h2>Edge Submission</h2>
+      <section className="layout-grid">
+        <article className="paper-card composer-card">
+          <div className="section-head">
+            <div>
+              <p className="section-kicker">Compose</p>
+              <h2>Edge Studio</h2>
+            </div>
+            <span className="sample-tag">{selectedSample}</span>
+          </div>
+
+          <form className="composer-form" onSubmit={handleSubmit}>
+            <div className="control-strip">
+              <label className="field-block">
+                <span>Hidden Test Samples</span>
+                <select
+                  className="studio-select"
+                  value={selectedSample}
+                  onChange={handleSampleChange}
+                >
+                  {Object.keys(SAMPLE_SETS).map((sampleName) => (
+                    <option key={sampleName} value={sampleName}>
+                      {sampleName}
+                    </option>
+                  ))}
+                  <option value="Custom">Custom</option>
+                </select>
+              </label>
+
+              <div className="explain-box">
+                <p className="explain-title">Validation Preview</p>
+                <p className="explain-copy">
+                  Spacing like <code>A -&gt; B</code> is normalized. Self-loops and malformed entries stay invalid.
+                </p>
               </div>
-              <span className="panel-pill">{selectedSample}</span>
             </div>
 
-            <form className="form-layout" onSubmit={handleSubmit}>
-              <div className="field-grid">
-                <div>
-                  <label htmlFor="hidden-sample-select">Hidden Test Samples</label>
-                  <select
-                    id="hidden-sample-select"
-                    className="dashboard-select"
-                    value={selectedSample}
-                    onChange={handleSampleChange}
-                  >
-                    {Object.keys(SAMPLE_SETS).map((sampleName) => (
-                      <option key={sampleName} value={sampleName}>
-                        {sampleName}
-                      </option>
-                    ))}
-                    <option value="Custom">Custom</option>
-                  </select>
-                </div>
-                <div className="helper-box">
-                  <p className="helper-title">Depth Rule</p>
-                  <p className="helper-text">Depth equals the number of nodes in the longest root-to-leaf path.</p>
-                </div>
-              </div>
-
-              <label htmlFor="edge-input">Enter one edge per line or comma-separated values</label>
+            <label className="field-block">
+              <span>Enter one edge per line or comma-separated values</span>
               <textarea
-                id="edge-input"
+                className="studio-input"
                 rows={12}
                 spellCheck="false"
                 value={input}
@@ -380,187 +324,217 @@ export default function HomePage() {
                 }}
                 placeholder="A->B&#10;A->C&#10;B->D"
               />
+            </label>
 
-              <div className="preview-grid">
-                <div className="metric-chip">
-                  <span>Total parsed lines</span>
-                  <strong>{totalParsedLines}</strong>
-                </div>
-                <div className="metric-chip">
-                  <span>Valid-looking entries</span>
-                  <strong>{liveAnalysis.validLookingCount}</strong>
-                </div>
-                <div className="metric-chip">
-                  <span>Invalid-looking entries</span>
-                  <strong>{liveAnalysis.invalidEntries.length}</strong>
-                </div>
+            <div className="preview-band">
+              <div className="preview-pill">
+                <span>Lines</span>
+                <strong>{totalParsedLines}</strong>
               </div>
-
-              <div className="action-row">
-                <button type="submit" disabled={isLoading}>
-                  {isLoading ? "Processing..." : "Submit to API"}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => handleSampleChange({ target: { value: DEFAULT_SAMPLE_NAME } })}
-                >
-                  Load Official Sample
-                </button>
-                <button type="button" className="ghost-button" onClick={handleClear}>
-                  Clear
-                </button>
+              <div className="preview-pill">
+                <span>Valid-looking</span>
+                <strong>{liveAnalysis.validLookingCount}</strong>
               </div>
-            </form>
-
-            <div className={`status-card ${error ? "error" : "success"}`}>
-              <p className="status-label">{error ? "API Error" : "System Status"}</p>
-              <p className="status-message">{error || status}</p>
-            </div>
-
-            <div className="chip-grid">
-              <div className="metric-chip">
-                <span>Invalid Entries</span>
-                <strong>{displayedInvalidEntries.length}</strong>
-              </div>
-              <div className="metric-chip">
-                <span>Duplicate Edges</span>
-                <strong>{displayedDuplicateEdges.length}</strong>
-              </div>
-              <div className="metric-chip">
-                <span>Cycle-safe API</span>
-                <strong>Enabled</strong>
-              </div>
-            </div>
-          </article>
-
-          <article className="panel summary-panel">
-            <div className="panel-header">
-              <div>
-                <p className="panel-kicker">At A Glance</p>
-                <h2>Summary Board</h2>
-              </div>
-            </div>
-            <div className="summary-cards">
-              {summaryCards.map(([label, value, caption]) => (
-                <div className="summary-card" key={label}>
-                  <p className="summary-title">{label}</p>
-                  <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
-                  <p className="summary-caption">{caption}</p>
-                </div>
-              ))}
-            </div>
-            <div className="notes-list">
-              <p className="note-line"><strong>Invalid entries:</strong> anything outside single-uppercase <code>X-&gt;Y</code>, including self-loops.</p>
-              <p className="note-line"><strong>Duplicate edges:</strong> only repeated exact edges, listed once.</p>
-              <p className="note-line"><strong>Cyclic components:</strong> any component with a cycle returns <code>tree: {}</code> and <code>has_cycle: true</code>.</p>
-            </div>
-          </article>
-
-          <article className="panel detail-panel" id="validation-section">
-            <div className="panel-header">
-              <div>
-                <p className="panel-kicker">Validation Feed</p>
-                <h2>Invalid and Duplicate Entries</h2>
+              <div className="preview-pill">
+                <span>Invalid-looking</span>
+                <strong>{liveAnalysis.invalidEntries.length}</strong>
               </div>
             </div>
 
-            <div className="detail-columns">
-              <div className="detail-box">
-                <p className="detail-title">Invalid</p>
-                <p className="detail-explainer">Trimmed before validation. Empty lines, malformed arrows, and self-loops land here.</p>
-                {displayedInvalidEntries.length > 0 ? (
-                  <div className="token-list">
-                    {displayedInvalidEntries.map((entry, index) => (
-                      <span className="token error-token" key={`${entry}-${index}`}>
-                        {entry}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="empty-state">No invalid entries detected.</p>
-                )}
-              </div>
-              <div className="detail-box">
-                <p className="detail-title">Duplicates</p>
-                <p className="detail-explainer">Only repeated exact edges are listed, even if the edge appears many times.</p>
-                {displayedDuplicateEdges.length > 0 ? (
-                  <div className="token-list">
-                    {displayedDuplicateEdges.map((entry, index) => (
-                      <span className="token warning-token" key={`${entry}-${index}`}>
-                        {entry}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="empty-state">No duplicate edges detected.</p>
-                )}
-              </div>
-            </div>
-          </article>
-
-          <article className="panel hierarchy-panel">
-            <div className="panel-header">
-              <div>
-                <p className="panel-kicker">Structured Insights</p>
-                <h2>Hierarchy Trees</h2>
-              </div>
-            </div>
-            <div className="hierarchy-list">
-              {response ? (
-                response.hierarchies.map((hierarchy) => (
-                  <div className="hierarchy-card" key={hierarchy.root}>
-                    <div className="hierarchy-topline">
-                      <div>
-                        <p className="detail-title">Root {hierarchy.root}</p>
-                        <p className="hierarchy-subtitle">
-                          {hierarchy.has_cycle
-                            ? "This connected component is cyclic."
-                            : `Longest root-to-leaf path: ${hierarchy.depth}`}
-                        </p>
-                      </div>
-                      <span className={`badge ${hierarchy.has_cycle ? "cycle" : ""}`}>
-                        {hierarchy.has_cycle ? "Cycle detected" : `Depth ${hierarchy.depth}`}
-                      </span>
-                    </div>
-                    {hierarchy.has_cycle ? (
-                      <div className="cycle-card">
-                        <p>Tree preview is disabled because this component contains a cycle.</p>
-                      </div>
-                    ) : (
-                      <div className="tree-view">
-                        <div className="tree-canvas">
-                          <TreeDiagramNode nodeName={hierarchy.root} subtree={hierarchy.tree} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p className="empty-state">Submit a payload to render hierarchy cards for each connected component.</p>
-              )}
-            </div>
-          </article>
-
-          <article className="panel json-panel">
-            <div className="panel-header">
-              <div>
-                <p className="panel-kicker">Raw Payload</p>
-                <h2>Formatted JSON</h2>
-              </div>
+            <div className="action-band">
+              <button type="submit" className="primary-cta" disabled={isLoading}>
+                {isLoading ? "Processing..." : "Analyze Graph"}
+              </button>
               <button
                 type="button"
-                className="secondary-button"
-                onClick={handleCopyJson}
-                disabled={!response}
+                className="secondary-cta"
+                onClick={() => handleSampleChange({ target: { value: DEFAULT_SAMPLE_NAME } })}
               >
-                Copy JSON
+                Load Official Sample
+              </button>
+              <button type="button" className="ghost-cta" onClick={handleClear}>
+                Clear Canvas
               </button>
             </div>
-            {copyToast ? <p className="copy-toast">{copyToast}</p> : null}
-            <pre className="json-output">{jsonBlock}</pre>
-          </article>
-        </section>
+          </form>
+
+          <div className={`message-strip ${error ? "error" : "ok"}`}>
+            <p className="message-title">{error ? "API Error" : "System Status"}</p>
+            <p className="message-body">{error || status}</p>
+          </div>
+        </article>
+
+        <article className="paper-card summary-card-block">
+          <div className="section-head">
+            <div>
+              <p className="section-kicker">Overview</p>
+              <h2>Result Snapshot</h2>
+            </div>
+          </div>
+
+          <div className="mosaic-grid">
+            {summaryCards.map(([label, value, caption]) => (
+              <div className="mosaic-card" key={label}>
+                <p className="mosaic-label">{label}</p>
+                <p className={`mosaic-value ${String(value).length > 14 ? "small" : ""}`}>{value}</p>
+                <p className="mosaic-caption">{caption}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rule-notes">
+            <p><strong>Invalid entries:</strong> anything outside single-uppercase <code>X-&gt;Y</code>, including self-loops.</p>
+            <p><strong>Duplicate edges:</strong> only repeated exact edges are listed, once.</p>
+            <p><strong>Cyclic components:</strong> any component with a loop returns <code>tree: {}</code> and <code>has_cycle: true</code>.</p>
+          </div>
+        </article>
+
+        <article className="paper-card ledger-card">
+          <div className="section-head">
+            <div>
+              <p className="section-kicker">Signals</p>
+              <h2>Validation Ledger</h2>
+            </div>
+          </div>
+
+          <div className="ledger-grid">
+            <div className="ledger-box">
+              <p className="ledger-title">Invalid Entries</p>
+              <p className="ledger-help">Trimmed before validation. Empty rows, malformed arrows, and self-loops show here.</p>
+              <div className="token-row">
+                {displayedInvalidEntries.length > 0 ? (
+                  displayedInvalidEntries.map((entry, index) => (
+                    <span className="token-chip token-red" key={`${entry}-${index}`}>
+                      {entry}
+                    </span>
+                  ))
+                ) : (
+                  <span className="empty-line">No invalid entries detected.</span>
+                )}
+              </div>
+            </div>
+
+            <div className="ledger-box">
+              <p className="ledger-title">Duplicate Edges</p>
+              <p className="ledger-help">Only repeated exact edges appear here, even if the same edge repeats many times.</p>
+              <div className="token-row">
+                {displayedDuplicateEdges.length > 0 ? (
+                  displayedDuplicateEdges.map((entry, index) => (
+                    <span className="token-chip token-amber" key={`${entry}-${index}`}>
+                      {entry}
+                    </span>
+                  ))
+                ) : (
+                  <span className="empty-line">No duplicate edges detected.</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article className="paper-card hierarchy-stage">
+          <div className="section-head">
+            <div>
+              <p className="section-kicker">Structures</p>
+              <h2>Hierarchy Gallery</h2>
+            </div>
+          </div>
+
+          <div className="gallery-stack">
+            {response ? (
+              response.hierarchies.map((hierarchy) => (
+                <div className="hierarchy-sheet" key={hierarchy.root}>
+                  <div className="hierarchy-header">
+                    <div>
+                      <p className="hierarchy-root">Root {hierarchy.root}</p>
+                      <p className="hierarchy-meta">
+                        {hierarchy.has_cycle
+                          ? "Cyclic component"
+                          : `Depth ${hierarchy.depth} • longest root-to-leaf path`}
+                      </p>
+                    </div>
+                    <span className={`status-chip ${hierarchy.has_cycle ? "cycle" : "tree"}`}>
+                      {hierarchy.has_cycle ? "Cycle detected" : `Depth ${hierarchy.depth}`}
+                    </span>
+                  </div>
+
+                  {hierarchy.has_cycle ? (
+                    <div className="cycle-banner">
+                      Tree rendering is intentionally disabled because this connected component contains a cycle.
+                    </div>
+                  ) : (
+                    <div className="tree-stage">
+                      <div className="tree-wrap">
+                        <TreeDiagramNode nodeName={hierarchy.root} subtree={hierarchy.tree} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="empty-gallery">
+                Submit a payload to render hierarchy sheets for each connected component.
+              </div>
+            )}
+          </div>
+        </article>
+
+        <article className="paper-card identity-card">
+          <div className="section-head">
+            <div>
+              <p className="section-kicker">Submission</p>
+              <h2>Identity & Links</h2>
+            </div>
+          </div>
+
+          <div className="identity-grid">
+            <div className="identity-box">
+              <span>Name</span>
+              <strong>{formatDisplayName(USER_PROFILE.user_id)}</strong>
+            </div>
+            <div className="identity-box">
+              <span>Email</span>
+              <strong>{USER_PROFILE.email_id}</strong>
+            </div>
+            <div className="identity-box">
+              <span>Roll Number</span>
+              <strong>{USER_PROFILE.college_roll_number}</strong>
+            </div>
+            <div className="identity-box">
+              <span>Hosted API</span>
+              <strong>{API_BASE_URL}</strong>
+            </div>
+            <div className="identity-box">
+              <span>Hosted Frontend</span>
+              <strong>{FRONTEND_URL}</strong>
+            </div>
+            <div className="identity-box">
+              <span>GitHub Repo</span>
+              <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
+                {GITHUB_REPO_URL}
+              </a>
+            </div>
+          </div>
+        </article>
+
+        <article className="paper-card json-card">
+          <div className="section-head">
+            <div>
+              <p className="section-kicker">Receipt</p>
+              <h2>Raw JSON</h2>
+            </div>
+            <button
+              type="button"
+              className="secondary-cta"
+              onClick={handleCopyJson}
+              disabled={!response}
+            >
+              Copy JSON
+            </button>
+          </div>
+          {copyToast ? <p className="copy-note">{copyToast}</p> : null}
+          <pre className="json-panel">{jsonBlock}</pre>
+        </article>
       </section>
     </main>
   );
