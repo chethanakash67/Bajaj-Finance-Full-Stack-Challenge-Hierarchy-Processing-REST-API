@@ -393,6 +393,12 @@ button{width:fit-content;border:none;border-radius:8px;padding:.5rem .9rem;font-
 .svg-tree-controls button:hover{background:var(--glass-hover);color:var(--text)}
 .svg-tree-controls button+button{border-left:1px solid var(--border)}
 
+.hierarchy-preview{display:flex;align-items:center;justify-content:space-between;gap:.8rem;border:1px solid var(--border);
+  border-radius:8px;background:var(--glass);padding:.8rem .9rem}
+.hierarchy-preview-title{font-family:var(--font-mono);font-size:.82rem;font-weight:700;color:var(--text)}
+.hierarchy-preview-meta{font-size:.68rem;color:var(--text-sec);font-family:var(--font-mono);margin-top:.12rem}
+.preview-open-btn{flex-shrink:0}
+
 /* Node tooltip */
 .node-tooltip{position:absolute;top:.4rem;left:.4rem;background:var(--surface2);border:1px solid var(--border-bright);
   border-radius:8px;padding:.4rem .55rem;backdrop-filter:blur(16px);min-width:140px;z-index:5;animation:fiu .2s ease}

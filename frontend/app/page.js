@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { memo, useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 /* ═══════════════════════════════════════════════════════════
    CONSTANTS
@@ -645,6 +645,31 @@ function SVGTree({
   );
 }
 
+function HierarchyPreviewCard({
+  root,
+  depth,
+  hasCycle,
+  breakingLink,
+  onSelect,
+  childrenCount,
+}) {
+  return (
+    <div className="hierarchy-preview">
+      <div>
+        <p className="hierarchy-preview-title">{root}</p>
+        <p className="hierarchy-preview-meta">
+          {hasCycle
+            ? `Cycle detected${breakingLink ? ` · break ${breakingLink}` : ""}`
+            : `Depth ${depth} · ${childrenCount} direct child${childrenCount === 1 ? "" : "ren"}`}
+        </p>
+      </div>
+      <button type="button" className="secondary-button preview-open-btn" onClick={onSelect}>
+        Open
+      </button>
+    </div>
+  );
+}
+
 
 /* ═══════════════════════════════════════════════════════════
    SYNTAX-HIGHLIGHTED INPUT
@@ -745,6 +770,8 @@ function SyntaxInput({ value, onChange, textareaRef, onFileDrop }) {
     </div>
   );
 }
+
+const MemoSyntaxInput = memo(SyntaxInput);
 
 /* ═══════════════════════════════════════════════════════════
    SKELETON LOADER
@@ -1259,7 +1286,7 @@ export default function HomePage() {
               <form className="form-layout" onSubmit={handleSubmit}>
                 <div>
                   <label htmlFor="edge-input">Edges — one per line, comma-separated, or drop a file</label>
-                  <SyntaxInput
+                  <MemoSyntaxInput
                     value={input}
                     onChange={handleInputChange}
                     textareaRef={textareaRef}
@@ -1598,6 +1625,7 @@ export default function HomePage() {
                   response.hierarchies.map((h) => {
                     const highlightState = buildHighlightStateForRoot(h.root);
                     const isSelectedRoot = selectedRoot === h.root;
+                    const childrenCount = Object.keys(h.tree || {}).length;
                     return (
                     <div
                       className={`hierarchy-card ${isSelectedRoot ? "selected-card" : ""}`}
@@ -1617,18 +1645,29 @@ export default function HomePage() {
                           {h.has_cycle ? "⟳ Cycle" : `${h.depth}`}
                         </span>
                       </div>
-                      <SVGTree
-                        root={h.root}
-                        subtree={h.tree}
-                        hasCycle={h.has_cycle}
-                        cyclePath={cyclePaths[h.root] || null}
-                        breakingLink={breakingLinks[h.root] || null}
-                        viewMode={viewMode}
-                        playbackNodes={isSelectedRoot ? playbackNodes : new Set()}
-                        highlightNodes={highlightState.nodes}
-                        highlightEdges={highlightState.edges}
-                        registerSvgRef={registerSvgRef}
-                      />
+                      {isSelectedRoot ? (
+                        <SVGTree
+                          root={h.root}
+                          subtree={h.tree}
+                          hasCycle={h.has_cycle}
+                          cyclePath={cyclePaths[h.root] || null}
+                          breakingLink={breakingLinks[h.root] || null}
+                          viewMode={viewMode}
+                          playbackNodes={playbackNodes}
+                          highlightNodes={highlightState.nodes}
+                          highlightEdges={highlightState.edges}
+                          registerSvgRef={registerSvgRef}
+                        />
+                      ) : (
+                        <HierarchyPreviewCard
+                          root={h.root}
+                          depth={h.depth}
+                          hasCycle={h.has_cycle}
+                          breakingLink={breakingLinks[h.root] || null}
+                          onSelect={() => setSelectedRoot(h.root)}
+                          childrenCount={childrenCount}
+                        />
+                      )}
                     </div>
                   );
                   })
