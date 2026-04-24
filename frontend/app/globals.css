@@ -470,7 +470,7 @@ button, textarea, select { font: inherit; }
   grid-template-columns: 1.3fr 0.95fr 0.95fr;
   grid-template-areas:
     "compose hierarchy hierarchy"
-    "summary detail json";
+    "detail summary json";
   align-items: start;
 }
 
@@ -1194,7 +1194,7 @@ button {
     grid-template-areas:
       "compose compose"
       "hierarchy hierarchy"
-      "summary detail"
+      "detail summary"
       "json json";
   }
 }

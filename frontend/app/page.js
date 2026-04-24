@@ -390,40 +390,6 @@ export default function HomePage() {
             </div>
           </article>
 
-          {/* ── SUMMARY ─────────────────────── */}
-          {!showHierarchyFallback && (
-          <article className="panel summary-panel">
-            <div className="panel-header">
-              <div>
-                <p className="panel-kicker">At a Glance</p>
-                <h2>Summary Board</h2>
-              </div>
-            </div>
-            <div className="summary-cards">
-              {summaryCards.map(([label, value, caption]) => (
-                <div className="summary-card" key={label}>
-                  <p className="summary-title">{label}</p>
-                  <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
-                  <p className="summary-caption">{caption}</p>
-                </div>
-              ))}
-            </div>
-            <div className="notes-list">
-              <p className="note-line">
-                <strong>Invalid entries</strong> — anything outside single-uppercase{" "}
-                <code>X-&gt;Y</code>, including self-loops.
-              </p>
-              <p className="note-line">
-                <strong>Duplicate edges</strong> — only repeated exact edges, listed once.
-              </p>
-              <p className="note-line">
-                <strong>Cyclic groups</strong> — any cycle returns <code>tree: {"{}"}</code> with{" "}
-                <code>has_cycle: true</code>.
-              </p>
-            </div>
-          </article>
-          )}
-
           {/* ── VALIDATION ──────────────────── */}
           {!showHierarchyFallback && (
           <article className="panel detail-panel" id="validation-section">
@@ -496,6 +462,40 @@ export default function HomePage() {
           </article>
           )}
 
+          {/* ── SUMMARY ─────────────────────── */}
+          {!showHierarchyFallback && (
+          <article className="panel summary-panel">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">At a Glance</p>
+                <h2>Summary Board</h2>
+              </div>
+            </div>
+            <div className="summary-cards">
+              {summaryCards.map(([label, value, caption]) => (
+                <div className="summary-card" key={label}>
+                  <p className="summary-title">{label}</p>
+                  <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
+                  <p className="summary-caption">{caption}</p>
+                </div>
+              ))}
+            </div>
+            <div className="notes-list">
+              <p className="note-line">
+                <strong>Invalid entries</strong> — anything outside single-uppercase{" "}
+                <code>X-&gt;Y</code>, including self-loops.
+              </p>
+              <p className="note-line">
+                <strong>Duplicate edges</strong> — only repeated exact edges, listed once.
+              </p>
+              <p className="note-line">
+                <strong>Cyclic groups</strong> — any cycle returns <code>tree: {"{}"}</code> with{" "}
+                <code>has_cycle: true</code>.
+              </p>
+            </div>
+          </article>
+          )}
+
           {/* ── HIERARCHY ───────────────────── */}
           <article className={`panel hierarchy-panel ${showHierarchyFallback ? "hierarchy-fallback-active" : ""}`} id="validation-section">
             <div className="panel-header">
@@ -536,24 +536,6 @@ export default function HomePage() {
             <div className="hierarchy-list">
               {showHierarchyFallback ? (
                 <div className="hierarchy-fallback-grid">
-                  <section className="fallback-block">
-                    <div className="panel-header fallback-header">
-                      <div>
-                        <p className="panel-kicker">At a Glance</p>
-                        <h2>Summary Board</h2>
-                      </div>
-                    </div>
-                    <div className="summary-cards">
-                      {summaryCards.map(([label, value, caption]) => (
-                        <div className="summary-card" key={label}>
-                          <p className="summary-title">{label}</p>
-                          <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
-                          <p className="summary-caption">{caption}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-
                   <section className="fallback-block">
                     <div className="panel-header fallback-header">
                       <div>
@@ -619,6 +601,24 @@ export default function HomePage() {
                           <p className="empty-state">No duplicate edges detected.</p>
                         )}
                       </div>
+                    </div>
+                  </section>
+
+                  <section className="fallback-block">
+                    <div className="panel-header fallback-header">
+                      <div>
+                        <p className="panel-kicker">At a Glance</p>
+                        <h2>Summary Board</h2>
+                      </div>
+                    </div>
+                    <div className="summary-cards">
+                      {summaryCards.map(([label, value, caption]) => (
+                        <div className="summary-card" key={label}>
+                          <p className="summary-title">{label}</p>
+                          <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
+                          <p className="summary-caption">{caption}</p>
+                        </div>
+                      ))}
                     </div>
                   </section>
                 </div>
