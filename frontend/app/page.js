@@ -171,6 +171,14 @@ export default function HomePage() {
     setStatus(INITIAL_STATUS);
   }
 
+  function handleInputChange(event) {
+    setInput(event.target.value);
+    setResponse(null);
+    setError("");
+    setCopyToast("");
+    setStatus("Input updated. Submit to analyze the current graph.");
+  }
+
   function handleNavClick(item) {
     setActiveNav(item.key);
     const el = document.getElementById(item.targetId);
@@ -325,7 +333,7 @@ export default function HomePage() {
                   rows={12}
                   spellCheck="false"
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={handleInputChange}
                   placeholder={"A->B\nA->C\nB->D"}
                   style={{ minHeight: "260px" }}
                 />
