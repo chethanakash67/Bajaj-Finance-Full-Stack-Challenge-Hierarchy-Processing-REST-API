@@ -5,10 +5,22 @@ import { memo, useState, useEffect, useCallback, useRef, useMemo } from "react";
 /* ═══════════════════════════════════════════════════════════
    CONSTANTS
    ═══════════════════════════════════════════════════════════ */
+const HOSTED_API_BASE_URL = "https://bajaj-finance-full-stack-challenge.onrender.com";
+const LOCAL_API_BASE_URL = "http://localhost:3000";
+
+function isLocalFrontend() {
+  if (typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1"].includes(window.location.hostname);
+}
+
+function getDefaultApiBaseUrl() {
+  return isLocalFrontend() ? LOCAL_API_BASE_URL : HOSTED_API_BASE_URL;
+}
+
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "https://bajaj-finance-full-stack-challenge.onrender.com";
+  process.env.NEXT_PUBLIC_API_BASE_URL || getDefaultApiBaseUrl();
 const API_ENDPOINT_DISPLAY =
-  process.env.NEXT_PUBLIC_API_ENDPOINT_DISPLAY || "https://bajaj-finance-full-stack-challenge.onrender.com/bfhl";
+  process.env.NEXT_PUBLIC_API_ENDPOINT_DISPLAY || `${API_BASE_URL}/bfhl`;
 const FRONTEND_URL =
   process.env.NEXT_PUBLIC_FRONTEND_URL || "https://bajaj-finance-full-stack-challenge.vercel.app/";
 const GITHUB_REPO_URL =
