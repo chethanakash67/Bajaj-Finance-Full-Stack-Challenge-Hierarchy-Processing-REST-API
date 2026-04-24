@@ -307,7 +307,7 @@ export default function HomePage() {
           </div>
           <div className="topbar-status">
             <span className="status-dot" />
-            
+            Ready
           </div>
         </header>
 
