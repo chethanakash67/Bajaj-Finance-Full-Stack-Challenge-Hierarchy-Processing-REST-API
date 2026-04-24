@@ -22,6 +22,7 @@ const USER_PROFILE = {
   email_id: "ga0822@srmist.edu.in",
   college_roll_number: "RA2311028010059",
 };
+const EMPTY_ARRAY = Object.freeze([]);
 
 /* ═══════════════════════════════════════════════════════════
    UTILITY FUNCTIONS
@@ -862,30 +863,34 @@ export default function HomePage() {
   const liveAnalysis = useMemo(() => analyzeInput(parsedLines), [parsedLines]);
   const totalParsedLines = parsedLines.length;
   const jsonString = useMemo(() => response ? JSON.stringify(response, null, 2) : null, [response]);
-  const renderableTrees = response ? response.hierarchies.filter((h) => !h.has_cycle) : [];
+  const hierarchies = response?.hierarchies || EMPTY_ARRAY;
+  const renderableTrees = useMemo(
+    () => hierarchies.filter((h) => !h.has_cycle),
+    [hierarchies]
+  );
   const hasRenderableTrees = renderableTrees.length > 0;
   const showHierarchyFallback = !response || !hasRenderableTrees;
   const analytics = response?.analytics || null;
   const graphCentrality = analytics?.centrality || null;
-  const componentDetails = analytics?.connected_components || [];
+  const componentDetails = analytics?.connected_components || EMPTY_ARRAY;
   const componentByRoot = useMemo(
     () => Object.fromEntries(componentDetails.map((detail) => [detail.root, detail])),
     [componentDetails]
   );
   const acceptedGraph = useMemo(
-    () => buildAcceptedGraph(analytics?.accepted_edges || []),
-    [analytics]
+    () => buildAcceptedGraph(analytics?.accepted_edges || EMPTY_ARRAY),
+    [analytics?.accepted_edges]
   );
   const allGraphNodes = acceptedGraph.nodes;
   const cyclePaths = useMemo(
-    () => Object.fromEntries((analytics?.cycle_components || []).map((cycle) => [cycle.root, cycle.cycle_path || []])),
-    [analytics]
+    () => Object.fromEntries((analytics?.cycle_components || EMPTY_ARRAY).map((cycle) => [cycle.root, cycle.cycle_path || EMPTY_ARRAY])),
+    [analytics?.cycle_components]
   );
   const breakingLinks = useMemo(
-    () => Object.fromEntries((analytics?.cycle_components || []).map((cycle) => [cycle.root, cycle.breaking_link || null])),
-    [analytics]
+    () => Object.fromEntries((analytics?.cycle_components || EMPTY_ARRAY).map((cycle) => [cycle.root, cycle.breaking_link || null])),
+    [analytics?.cycle_components]
   );
-  const selfLoopEntries = analytics?.self_loops || [];
+  const selfLoopEntries = analytics?.self_loops || EMPTY_ARRAY;
   const disconnectedComponents = analytics?.disconnected_components || 0;
 
   const parsedRef = useRef(parsedLines);
@@ -1809,6 +1814,7 @@ export default function HomePage() {
                   response.hierarchies.map((h) => {
                     const isSelectedRoot = selectedRoot === h.root;
                     const childrenCount = Object.keys(h.tree || {}).length;
+                    const cardHighlightState = buildHighlightStateForRoot(h.root);
                     return (
                     <div
                       className={`hierarchy-card ${isSelectedRoot ? "selected-card" : ""}`}
@@ -1836,6 +1842,22 @@ export default function HomePage() {
                         onSelect={() => setSelectedRoot(h.root)}
                         childrenCount={childrenCount}
                       />
+                      {isSelectedRoot && (
+                        <div className="hierarchy-inline-graph">
+                          <SVGTree
+                            root={h.root}
+                            subtree={h.tree}
+                            hasCycle={h.has_cycle}
+                            cyclePath={cyclePaths[h.root] || null}
+                            breakingLink={breakingLinks[h.root] || null}
+                            viewMode={viewMode}
+                            playbackNodes={playbackNodes}
+                            highlightNodes={cardHighlightState.nodes}
+                            highlightEdges={cardHighlightState.edges}
+                            registerSvgRef={registerSvgRef}
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                   })

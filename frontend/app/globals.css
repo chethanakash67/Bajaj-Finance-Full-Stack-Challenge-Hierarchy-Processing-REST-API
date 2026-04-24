@@ -408,6 +408,7 @@ button{width:fit-content;border:none;border-radius:8px;padding:.5rem .9rem;font-
 .hierarchy-preview-title{font-family:var(--font-mono);font-size:.82rem;font-weight:700;color:var(--text)}
 .hierarchy-preview-meta{font-size:.68rem;color:var(--text-sec);font-family:var(--font-mono);margin-top:.12rem}
 .preview-open-btn{flex-shrink:0}
+.hierarchy-inline-graph{margin-top:.55rem}
 
 /* Node tooltip */
 .node-tooltip{position:absolute;top:.4rem;left:.4rem;background:var(--surface2);border:1px solid var(--border-bright);
