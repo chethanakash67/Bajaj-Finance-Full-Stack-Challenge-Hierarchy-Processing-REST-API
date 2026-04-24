@@ -146,22 +146,15 @@ function extractCyclePath(edges) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SVG TREE — Reingold-Tilford Layout
+   SVG TREE — Compact Layout
    ═══════════════════════════════════════════════════════════ */
-const NODE_W = 52, NODE_H = 36, H_GAP = 20, V_GAP = 60;
+const NODE_W = 32, NODE_H = 24, H_GAP = 8, V_GAP = 32;
 
-function layoutTree(root, subtree, mode = "dfs") {
-  // Build flat node list with positions
+function layoutTree(root, subtree) {
   const nodes = [], edges = [];
   let xCounter = 0;
-
-  function getChildEntries(sub) {
-    const entries = Object.entries(sub);
-    return mode === "bfs" ? entries : entries; // both use same subtree, BFS reorders rendering
-  }
-
   function computeLayout(name, sub, depth) {
-    const children = getChildEntries(sub);
+    const children = Object.entries(sub);
     if (children.length === 0) {
       const x = xCounter * (NODE_W + H_GAP);
       xCounter++;
@@ -169,32 +162,18 @@ function layoutTree(root, subtree, mode = "dfs") {
       nodes.push(node);
       return node;
     }
-    const childNodes = children.map(([childName, childSub]) => {
-      const childNode = computeLayout(childName, childSub, depth + 1);
-      return childNode;
-    });
-    const minX = Math.min(...childNodes.map(n => n.x));
-    const maxX = Math.max(...childNodes.map(n => n.x));
-    const x = (minX + maxX) / 2;
+    const childNodes = children.map(([cn, cs]) => computeLayout(cn, cs, depth + 1));
+    const x = (Math.min(...childNodes.map(n => n.x)) + Math.max(...childNodes.map(n => n.x))) / 2;
     const node = { name, x, y: depth * (NODE_H + V_GAP), depth, childCount: childNodes.length };
     nodes.push(node);
-    childNodes.forEach(child => {
-      edges.push({ from: node, to: child });
-    });
+    childNodes.forEach(child => edges.push({ from: node, to: child }));
     return node;
   }
-
-  if (mode === "bfs") {
-    // BFS level-order: still use same tree structure but annotate levels
-    computeLayout(root, subtree, 0);
-  } else {
-    computeLayout(root, subtree, 0);
-  }
-
+  computeLayout(root, subtree, 0);
   return { nodes, edges };
 }
 
-function SVGTree({ root, subtree, hasCycle, cyclePath, mode }) {
+function SVGTree({ root, subtree, hasCycle, cyclePath }) {
   const containerRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
@@ -203,17 +182,18 @@ function SVGTree({ root, subtree, hasCycle, cyclePath, mode }) {
 
   const layout = useMemo(() => {
     if (hasCycle) return { nodes: [], edges: [] };
-    return layoutTree(root, subtree, mode);
-  }, [root, subtree, hasCycle, mode]);
+    return layoutTree(root, subtree);
+  }, [root, subtree, hasCycle]);
 
-  // Reset transform when tree changes
+  // Auto-fit: compute scale to fit container
   useEffect(() => {
-    setTransform({ x: 20, y: 20, scale: 1 });
+    setTransform({ x: 10, y: 10, scale: 1 });
     setInspectedNode(null);
-  }, [root, subtree, mode]);
+  }, [root, subtree]);
 
-  const maxX = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.x)) + NODE_W + 40 : 200;
-  const maxY = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.y)) + NODE_H + 40 : 100;
+  const PAD = 20;
+  const maxX = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.x)) + NODE_W + PAD : 160;
+  const maxY = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.y)) + NODE_H + PAD : 80;
 
   function onWheel(e) {
     e.preventDefault();
@@ -283,12 +263,13 @@ function SVGTree({ root, subtree, hasCycle, cyclePath, mode }) {
       <svg
         className="svg-tree"
         viewBox={`0 0 ${maxX} ${maxY}`}
+        preserveAspectRatio="xMidYMin meet"
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        style={{ cursor: dragging ? "grabbing" : "grab" }}
+        style={{ cursor: dragging ? "grabbing" : "grab", maxHeight: Math.min(280, maxY + 20) }}
       >
         <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
           {/* Edges */}
@@ -323,9 +304,9 @@ function SVGTree({ root, subtree, hasCycle, cyclePath, mode }) {
                 ry="8"
                 className={`svg-node-rect ${inspectedNode === node.name ? "inspected" : ""} ${node.name === root ? "root-node" : ""}`}
               />
-              <circle cx="12" cy={NODE_H / 2} r="3" className="svg-node-dot" />
+              <circle cx="8" cy={NODE_H / 2} r="2.5" className="svg-node-dot" />
               <text
-                x={NODE_W / 2 + 4}
+                x={NODE_W / 2 + 2}
                 y={NODE_H / 2 + 1}
                 className="svg-node-label"
                 dominantBaseline="middle"
@@ -512,13 +493,19 @@ export default function HomePage() {
     if (typeof window !== "undefined") localStorage.setItem("hi-theme", theme);
   }, [theme]);
 
-  const parsedLines = parseEdges(input);
-  const liveAnalysis = analyzeInput(parsedLines);
+  const parsedLines = useMemo(() => parseEdges(input), [input]);
+  const liveAnalysis = useMemo(() => analyzeInput(parsedLines), [parsedLines]);
   const totalParsedLines = parsedLines.length;
-  const jsonString = response ? JSON.stringify(response, null, 2) : null;
+  const jsonString = useMemo(() => response ? JSON.stringify(response, null, 2) : null, [response]);
   const renderableTrees = response ? response.hierarchies.filter((h) => !h.has_cycle) : [];
   const hasRenderableTrees = renderableTrees.length > 0;
   const showHierarchyFallback = !response || !hasRenderableTrees;
+
+  // Use a ref so handleSubmit always sees latest input without re-creating
+  const inputRef = useRef(input);
+  inputRef.current = input;
+  const parsedRef = useRef(parsedLines);
+  parsedRef.current = parsedLines;
 
   // Extract cycle paths for all cyclic components
   const cyclePaths = useMemo(() => {
@@ -526,12 +513,12 @@ export default function HomePage() {
     const paths = {};
     for (const h of response.hierarchies) {
       if (h.has_cycle) {
-        const cp = extractCyclePath(parsedLines);
+        const cp = extractCyclePath(parsedRef.current);
         if (cp) paths[h.root] = cp;
       }
     }
     return paths;
-  }, [response, parsedLines]);
+  }, [response]);
 
   // Complexity estimate
   const complexity = useMemo(() => {
@@ -541,7 +528,9 @@ export default function HomePage() {
 
   const handleSubmit = useCallback(async (event) => {
     if (event) event.preventDefault();
-    if (totalParsedLines === 0 || (totalParsedLines === 1 && parsedLines[0] === "")) {
+    const lines = parsedRef.current;
+    const count = lines.length;
+    if (count === 0 || (count === 1 && lines[0] === "")) {
       setError("Please enter at least one edge.");
       setStatus("No request sent.");
       setResponse(null);
@@ -555,7 +544,7 @@ export default function HomePage() {
       const apiResponse = await fetch(`${API_BASE_URL}/bfhl`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: parsedLines }),
+        body: JSON.stringify({ data: lines }),
       });
       const payload = await apiResponse.json();
       const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
@@ -571,7 +560,7 @@ export default function HomePage() {
       setStatus("API unreachable.");
       setResponse(null);
     } finally { setIsLoading(false); }
-  }, [totalParsedLines, parsedLines]);
+  }, []);
 
   async function handleCopyJson() {
     if (!jsonString) return;
@@ -997,7 +986,6 @@ export default function HomePage() {
                         subtree={h.tree}
                         hasCycle={h.has_cycle}
                         cyclePath={cyclePaths[h.root] || null}
-                        mode={treeMode}
                       />
                     </div>
                   ))
