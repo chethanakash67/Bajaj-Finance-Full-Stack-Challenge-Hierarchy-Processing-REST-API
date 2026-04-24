@@ -366,6 +366,9 @@ button{width:fit-content;border:none;border-radius:8px;padding:.5rem .9rem;font-
 .hierarchy-topline{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.35rem}
 .hierarchy-title{font-size:.85rem;font-weight:700;color:var(--text)}
 .hierarchy-subtitle{font-family:var(--font-mono);font-size:.62rem;color:var(--text-muted);margin-top:.05rem}
+.active-hierarchy-viewer{margin-bottom:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--glass);padding:.75rem}
+.active-hierarchy-header{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.5rem}
+.active-hierarchy-header h3{font-size:.95rem;font-weight:700;color:var(--text)}
 .badge{display:inline-flex;align-items:center;gap:.25rem;border-radius:6px;padding:.2rem .4rem;font-size:.6rem;
   font-family:var(--font-mono);font-weight:700;background:var(--green-soft);color:var(--green);border:1px solid rgba(0,245,160,.12);white-space:nowrap}
 .badge.cycle{background:var(--red-soft);color:var(--red);border-color:rgba(255,107,107,.12)}

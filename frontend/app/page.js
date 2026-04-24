@@ -683,8 +683,15 @@ function HierarchyPreviewCard({
             : `Depth ${depth} · ${childrenCount} direct child${childrenCount === 1 ? "" : "ren"}`}
         </p>
       </div>
-      <button type="button" className="secondary-button preview-open-btn" onClick={onSelect}>
-        Open
+      <button
+        type="button"
+        className="secondary-button preview-open-btn"
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
+      >
+        View Graph
       </button>
     </div>
   );
@@ -895,6 +902,9 @@ export default function HomePage() {
   }, [analytics, liveAnalysis]);
 
   const selectedComponent = selectedRoot ? componentByRoot[selectedRoot] : null;
+  const selectedHierarchy = selectedRoot
+    ? response?.hierarchies?.find((hierarchy) => hierarchy.root === selectedRoot) || null
+    : null;
   const selectedTreeNodes =
     selectedComponent?.type === "tree"
       ? [...(selectedComponent.nodes || [])].sort()
@@ -1221,6 +1231,11 @@ export default function HomePage() {
     return { nodes, edges };
   }
 
+  const activeHighlightState = useMemo(
+    () => (selectedRoot ? buildHighlightStateForRoot(selectedRoot) : { nodes: new Set(), edges: new Set() }),
+    [selectedRoot, playbackNodes, searchContext, pathNodes, pathEdges, componentByRoot]
+  );
+
   return (
     <main className="dashboard-shell">
       <div className="orb orb-1" />
@@ -1516,8 +1531,10 @@ export default function HomePage() {
                         value={selectedRoot || ""}
                         onChange={(event) => setSelectedRoot(event.target.value)}
                       >
-                        {renderableTrees.map((tree) => (
-                          <option key={tree.root} value={tree.root}>{tree.root}</option>
+                        {response.hierarchies.map((tree) => (
+                          <option key={tree.root} value={tree.root}>
+                            {tree.root}{tree.has_cycle ? " · cycle" : ""}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -1704,6 +1721,35 @@ export default function HomePage() {
                 </div>
               )}
 
+              {!showHierarchyFallback && selectedHierarchy && (
+                <div className="active-hierarchy-viewer">
+                  <div className="active-hierarchy-header">
+                    <div>
+                      <p className="panel-kicker">Active Graph</p>
+                      <h3>
+                        Root {selectedHierarchy.root}
+                        {selectedHierarchy.has_cycle ? " · Cycle" : ` · Depth ${selectedHierarchy.depth}`}
+                      </h3>
+                    </div>
+                    <span className={`badge ${selectedHierarchy.has_cycle ? "cycle" : ""}`}>
+                      {selectedHierarchy.has_cycle ? "⟳ Cycle" : `${selectedHierarchy.depth}`}
+                    </span>
+                  </div>
+                  <SVGTree
+                    root={selectedHierarchy.root}
+                    subtree={selectedHierarchy.tree}
+                    hasCycle={selectedHierarchy.has_cycle}
+                    cyclePath={cyclePaths[selectedHierarchy.root] || null}
+                    breakingLink={breakingLinks[selectedHierarchy.root] || null}
+                    viewMode={viewMode}
+                    playbackNodes={playbackNodes}
+                    highlightNodes={activeHighlightState.nodes}
+                    highlightEdges={activeHighlightState.edges}
+                    registerSvgRef={registerSvgRef}
+                  />
+                </div>
+              )}
+
               <div className="hierarchy-list">
                 {isLoading ? (
                   <SkeletonPanel lines={6} wide />
@@ -1761,7 +1807,6 @@ export default function HomePage() {
                   </div>
                 ) : (
                   response.hierarchies.map((h) => {
-                    const highlightState = buildHighlightStateForRoot(h.root);
                     const isSelectedRoot = selectedRoot === h.root;
                     const childrenCount = Object.keys(h.tree || {}).length;
                     return (
@@ -1783,29 +1828,14 @@ export default function HomePage() {
                           {h.has_cycle ? "⟳ Cycle" : `${h.depth}`}
                         </span>
                       </div>
-                      {isSelectedRoot ? (
-                        <SVGTree
-                          root={h.root}
-                          subtree={h.tree}
-                          hasCycle={h.has_cycle}
-                          cyclePath={cyclePaths[h.root] || null}
-                          breakingLink={breakingLinks[h.root] || null}
-                          viewMode={viewMode}
-                          playbackNodes={playbackNodes}
-                          highlightNodes={highlightState.nodes}
-                          highlightEdges={highlightState.edges}
-                          registerSvgRef={registerSvgRef}
-                        />
-                      ) : (
-                        <HierarchyPreviewCard
-                          root={h.root}
-                          depth={h.depth}
-                          hasCycle={h.has_cycle}
-                          breakingLink={breakingLinks[h.root] || null}
-                          onSelect={() => setSelectedRoot(h.root)}
-                          childrenCount={childrenCount}
-                        />
-                      )}
+                      <HierarchyPreviewCard
+                        root={h.root}
+                        depth={h.depth}
+                        hasCycle={h.has_cycle}
+                        breakingLink={breakingLinks[h.root] || null}
+                        onSelect={() => setSelectedRoot(h.root)}
+                        childrenCount={childrenCount}
+                      />
                     </div>
                   );
                   })
