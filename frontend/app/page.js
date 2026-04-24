@@ -5,22 +5,11 @@ import { memo, useState, useEffect, useCallback, useRef, useMemo } from "react";
 /* ═══════════════════════════════════════════════════════════
    CONSTANTS
    ═══════════════════════════════════════════════════════════ */
-const HOSTED_API_BASE_URL = "https://bajaj-finance-full-stack-challenge.onrender.com";
-const LOCAL_API_BASE_URL = "http://localhost:3000";
-
-function isLocalFrontend() {
-  if (typeof window === "undefined") return false;
-  return ["localhost", "127.0.0.1"].includes(window.location.hostname);
-}
-
-function getDefaultApiBaseUrl() {
-  return isLocalFrontend() ? LOCAL_API_BASE_URL : HOSTED_API_BASE_URL;
-}
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || getDefaultApiBaseUrl();
+const API_REQUEST_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+  ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/bfhl`
+  : "/api/bfhl";
 const API_ENDPOINT_DISPLAY =
-  process.env.NEXT_PUBLIC_API_ENDPOINT_DISPLAY || `${API_BASE_URL}/bfhl`;
+  process.env.NEXT_PUBLIC_API_ENDPOINT_DISPLAY || API_REQUEST_URL;
 const FRONTEND_URL =
   process.env.NEXT_PUBLIC_FRONTEND_URL || "https://bajaj-finance-full-stack-challenge.vercel.app/";
 const GITHUB_REPO_URL =
@@ -1010,7 +999,7 @@ export default function HomePage() {
     setRequestTime(null);
     const t0 = performance.now();
     try {
-      const apiResponse = await fetch(`${API_BASE_URL}/bfhl`, {
+      const apiResponse = await fetch(API_REQUEST_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data: lines }),
