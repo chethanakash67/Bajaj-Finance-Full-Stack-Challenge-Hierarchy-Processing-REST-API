@@ -56,6 +56,15 @@ const USER_PROFILE = {
   email_id: "ga0822@srmist.edu.in",
   college_roll_number: "RA2311028010059",
 };
+
+function formatDisplayName(name) {
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", targetId: "dashboard-section" },
   { key: "hidden-tests", label: "Hidden Tests", targetId: "hidden-tests-section" },
@@ -236,13 +245,13 @@ export default function HomePage() {
 
   const summaryCards = response
     ? [
-        ["UID", response.user_id, "Identity tag"],
+        ["UID", formatDisplayName(response.user_id.replace(/_/g, " ")), "Identity tag"],
         ["Trees", response.summary.total_trees, "Valid non-cyclic groups"],
         ["Cycles", response.summary.total_cycles, "Cyclic components"],
         ["Largest", response.summary.largest_tree_root ?? "N/A", "Greatest depth root"],
       ]
     : [
-        ["UID", USER_PROFILE.user_id, "Identity tag"],
+        ["UID", formatDisplayName(USER_PROFILE.user_id), "Identity tag"],
         ["Trees", 0, "Valid non-cyclic groups"],
         ["Cycles", 0, "Cyclic components"],
         ["Largest", "N/A", "Greatest depth root"],
