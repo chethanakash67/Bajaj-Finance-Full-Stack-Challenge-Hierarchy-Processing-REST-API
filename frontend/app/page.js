@@ -26,6 +26,23 @@ function formatDisplayName(name) {
     .join(" ");
 }
 
+function formatIdentityDisplay(rawValue) {
+  const normalized = String(rawValue || "").replace(/_/g, " ").trim();
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  const numericSuffix = /^\d{6,}$/.test(parts[parts.length - 1] || "")
+    ? parts.pop()
+    : "";
+
+  const displayName = parts.length > 0
+    ? formatDisplayName(parts.join(" "))
+    : formatDisplayName(normalized);
+
+  return {
+    displayName,
+    numericSuffix,
+  };
+}
+
 const NAV_ITEMS = [
   { key: "dashboard",  label: "Dashboard",  targetId: "dashboard-section" },
   { key: "validation", label: "Validation", targetId: "validation-section" },
@@ -185,15 +202,18 @@ export default function HomePage() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  const responseIdentity = formatIdentityDisplay(response?.user_id || USER_PROFILE.user_id);
+  const profileIdentity = formatIdentityDisplay(USER_PROFILE.user_id);
+
   const summaryCards = response
     ? [
-        ["UID",     formatDisplayName(response.user_id.replace(/_/g, " ")), "Identity tag"],
+        ["UID", responseIdentity.displayName, responseIdentity.numericSuffix ? `Identity tag · ${responseIdentity.numericSuffix}` : "Identity tag"],
         ["Trees",   response.summary.total_trees,                           "Valid non-cyclic"],
         ["Cycles",  response.summary.total_cycles,                          "Cyclic groups"],
         ["Largest", response.summary.largest_tree_root ?? "N/A",            "Greatest depth root"],
       ]
     : [
-        ["UID",     formatDisplayName(USER_PROFILE.user_id), "Identity tag"],
+        ["UID", profileIdentity.displayName, profileIdentity.numericSuffix ? `Identity tag · ${profileIdentity.numericSuffix}` : "Identity tag"],
         ["Trees",   "—", "Valid non-cyclic"],
         ["Cycles",  "—", "Cyclic groups"],
         ["Largest", "—", "Greatest depth root"],
@@ -248,7 +268,10 @@ export default function HomePage() {
           </div>
           <div className="sidebar-note profile-note">
             <span className="sidebar-label">Profile</span>
-            <p className="sidebar-value" style={{ marginTop: "0.35rem" }}>{USER_PROFILE.user_id}</p>
+            <p className="sidebar-value" style={{ marginTop: "0.35rem" }}>{profileIdentity.displayName}</p>
+            {profileIdentity.numericSuffix && (
+              <span className="sidebar-caption">ID · {profileIdentity.numericSuffix}</span>
+            )}
             <span className="sidebar-caption">{USER_PROFILE.email_id}</span>
             <span className="sidebar-caption">{USER_PROFILE.college_roll_number}</span>
           </div>
@@ -297,6 +320,7 @@ export default function HomePage() {
 
         {/* Grid */}
         <section className="dashboard-grid">
+          <div className="dashboard-left-column">
 
           {/* ── COMPOSE ─────────────────────── */}
           <article className="panel compose-panel">
@@ -469,41 +493,11 @@ export default function HomePage() {
             </div>
           </article>
           )}
+          </div>
+
+          <div className="dashboard-right-column">
 
           {/* ── SUMMARY ─────────────────────── */}
-          {!showHierarchyFallback && (
-          <article className="panel summary-panel">
-            <div className="panel-header">
-              <div>
-                <p className="panel-kicker">At a Glance</p>
-                <h2>Summary Board</h2>
-              </div>
-            </div>
-            <div className="summary-cards">
-              {summaryCards.map(([label, value, caption]) => (
-                <div className="summary-card" key={label}>
-                  <p className="summary-title">{label}</p>
-                  <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
-                  <p className="summary-caption">{caption}</p>
-                </div>
-              ))}
-            </div>
-            <div className="notes-list">
-              <p className="note-line">
-                <strong>Invalid entries</strong> — anything outside single-uppercase{" "}
-                <code>X-&gt;Y</code>, including self-loops.
-              </p>
-              <p className="note-line">
-                <strong>Duplicate edges</strong> — only repeated exact edges, listed once.
-              </p>
-              <p className="note-line">
-                <strong>Cyclic groups</strong> — any cycle returns <code>tree: {"{}"}</code> with{" "}
-                <code>has_cycle: true</code>.
-              </p>
-            </div>
-          </article>
-          )}
-
           {/* ── HIERARCHY ───────────────────── */}
           <article className={`panel hierarchy-panel ${showHierarchyFallback ? "hierarchy-fallback-active" : ""}`} id="validation-section">
             <div className="panel-header">
@@ -663,6 +657,40 @@ export default function HomePage() {
             </div>
           </article>
 
+          <div className="dashboard-right-meta">
+          {!showHierarchyFallback && (
+          <article className="panel summary-panel">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">At a Glance</p>
+                <h2>Summary Board</h2>
+              </div>
+            </div>
+            <div className="summary-cards">
+              {summaryCards.map(([label, value, caption]) => (
+                <div className="summary-card" key={label}>
+                  <p className="summary-title">{label}</p>
+                  <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
+                  <p className="summary-caption">{caption}</p>
+                </div>
+              ))}
+            </div>
+            <div className="notes-list">
+              <p className="note-line">
+                <strong>Invalid entries</strong> — anything outside single-uppercase{" "}
+                <code>X-&gt;Y</code>, including self-loops.
+              </p>
+              <p className="note-line">
+                <strong>Duplicate edges</strong> — only repeated exact edges, listed once.
+              </p>
+              <p className="note-line">
+                <strong>Cyclic groups</strong> — any cycle returns <code>tree: {"{}"}</code> with{" "}
+                <code>has_cycle: true</code>.
+              </p>
+            </div>
+          </article>
+          )}
+
           {/* ── JSON ────────────────────────── */}
           <article className="panel json-panel">
             <div className="panel-header">
@@ -691,7 +719,9 @@ export default function HomePage() {
               }}
             />
           </article>
+          </div>
 
+          </div>
         </section>
       </section>
     </main>
