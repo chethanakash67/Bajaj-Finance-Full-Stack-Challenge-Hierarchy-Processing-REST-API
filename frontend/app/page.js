@@ -146,9 +146,9 @@ function extractCyclePath(edges) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SVG TREE — Compact Layout
+   SVG TREE — Fixed Canvas, Manual Zoom
    ═══════════════════════════════════════════════════════════ */
-const NODE_W = 32, NODE_H = 24, H_GAP = 8, V_GAP = 32;
+const NODE_W = 44, NODE_H = 32, H_GAP = 14, V_GAP = 44;
 
 function layoutTree(root, subtree) {
   const nodes = [], edges = [];
@@ -174,7 +174,7 @@ function layoutTree(root, subtree) {
 }
 
 function SVGTree({ root, subtree, hasCycle, cyclePath }) {
-  const containerRef = useRef(null);
+  const wrapperRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -185,40 +185,29 @@ function SVGTree({ root, subtree, hasCycle, cyclePath }) {
     return layoutTree(root, subtree);
   }, [root, subtree, hasCycle]);
 
-  // Auto-fit: compute scale to fit container
   useEffect(() => {
-    setTransform({ x: 10, y: 10, scale: 1 });
+    setTransform({ x: 0, y: 0, scale: 1 });
     setInspectedNode(null);
   }, [root, subtree]);
 
-  const PAD = 20;
-  const maxX = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.x)) + NODE_W + PAD : 160;
-  const maxY = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.y)) + NODE_H + PAD : 80;
+  const PAD = 30;
+  const treeW = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.x)) + NODE_W + PAD * 2 : 200;
+  const treeH = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.y)) + NODE_H + PAD * 2 : 100;
 
   function onWheel(e) {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setTransform(prev => ({
-      ...prev,
-      scale: Math.max(0.3, Math.min(3, prev.scale * delta))
-    }));
+    setTransform(prev => ({ ...prev, scale: Math.max(0.3, Math.min(3, prev.scale * delta)) }));
   }
-
   function onMouseDown(e) {
     if (e.target.closest(".svg-node-group")) return;
     setDragging(true);
     setDragStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
   }
-
   function onMouseMove(e) {
     if (!dragging) return;
-    setTransform(prev => ({
-      ...prev,
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    }));
+    setTransform(prev => ({ ...prev, x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }));
   }
-
   function onMouseUp() { setDragging(false); }
 
   function getPathFromRoot(nodeName) {
@@ -258,21 +247,23 @@ function SVGTree({ root, subtree, hasCycle, cyclePath }) {
     );
   }
 
+  const canvasW = Math.max(treeW, 300);
+  const canvasH = Math.max(treeH, 120);
+
   return (
-    <div className="svg-tree-wrapper" ref={containerRef}>
+    <div className="svg-tree-wrapper" ref={wrapperRef}>
       <svg
         className="svg-tree"
-        viewBox={`0 0 ${maxX} ${maxY}`}
-        preserveAspectRatio="xMidYMin meet"
+        width={canvasW}
+        height={canvasH}
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        style={{ cursor: dragging ? "grabbing" : "grab", maxHeight: Math.min(280, maxY + 20) }}
+        style={{ cursor: dragging ? "grabbing" : "grab" }}
       >
-        <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
-          {/* Edges */}
+        <g transform={`translate(${transform.x + PAD}, ${transform.y + PAD}) scale(${transform.scale})`}>
           {layout.edges.map((edge, i) => {
             const x1 = edge.from.x + NODE_W / 2;
             const y1 = edge.from.y + NODE_H;
@@ -280,45 +271,25 @@ function SVGTree({ root, subtree, hasCycle, cyclePath }) {
             const y2 = edge.to.y;
             const midY = (y1 + y2) / 2;
             return (
-              <path
-                key={`e-${i}`}
-                d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
-                className="svg-edge"
-                style={{ animationDelay: `${i * 0.05}s` }}
-              />
+              <path key={`e-${i}`} d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`} className="svg-edge" />
             );
           })}
-          {/* Nodes */}
           {layout.nodes.map((node, i) => (
             <g
               key={`n-${node.name}-${i}`}
               className="svg-node-group"
               transform={`translate(${node.x}, ${node.y})`}
               onClick={() => setInspectedNode(inspectedNode === node.name ? null : node.name)}
-              style={{ animationDelay: `${i * 0.04}s` }}
             >
-              <rect
-                width={NODE_W}
-                height={NODE_H}
-                rx="8"
-                ry="8"
-                className={`svg-node-rect ${inspectedNode === node.name ? "inspected" : ""} ${node.name === root ? "root-node" : ""}`}
-              />
-              <circle cx="8" cy={NODE_H / 2} r="2.5" className="svg-node-dot" />
-              <text
-                x={NODE_W / 2 + 2}
-                y={NODE_H / 2 + 1}
-                className="svg-node-label"
-                dominantBaseline="middle"
-                textAnchor="middle"
-              >
+              <rect width={NODE_W} height={NODE_H} rx="6" ry="6"
+                className={`svg-node-rect ${inspectedNode === node.name ? "inspected" : ""} ${node.name === root ? "root-node" : ""}`} />
+              <text x={NODE_W / 2} y={NODE_H / 2} className="svg-node-label" dominantBaseline="central" textAnchor="middle">
                 {node.name}
               </text>
             </g>
           ))}
         </g>
       </svg>
-      {/* Inspect tooltip */}
       {inspectedNode && (
         <div className="node-tooltip">
           <div className="node-tooltip-header">
@@ -339,13 +310,14 @@ function SVGTree({ root, subtree, hasCycle, cyclePath }) {
         </div>
       )}
       <div className="svg-tree-controls">
-        <button type="button" onClick={() => setTransform(p => ({ ...p, scale: Math.min(3, p.scale * 1.2) }))}>+</button>
-        <button type="button" onClick={() => setTransform(p => ({ ...p, scale: Math.max(0.3, p.scale * 0.8) }))}>−</button>
-        <button type="button" onClick={() => setTransform({ x: 20, y: 20, scale: 1 })}>⟲</button>
+        <button type="button" onClick={() => setTransform(p => ({ ...p, scale: Math.min(3, p.scale * 1.3) }))}>+</button>
+        <button type="button" onClick={() => setTransform(p => ({ ...p, scale: Math.max(0.3, p.scale * 0.7) }))}>−</button>
+        <button type="button" onClick={() => setTransform({ x: 0, y: 0, scale: 1 })}>⟲</button>
       </div>
     </div>
   );
 }
+
 
 /* ═══════════════════════════════════════════════════════════
    SYNTAX-HIGHLIGHTED INPUT
