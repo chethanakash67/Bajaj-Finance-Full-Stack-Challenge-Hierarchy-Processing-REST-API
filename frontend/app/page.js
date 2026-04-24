@@ -222,6 +222,24 @@ export default function HomePage() {
   const displayedInvalid    = response ? response.invalid_entries    : liveAnalysis.invalidEntries;
   const displayedDuplicates = response ? response.duplicate_edges     : liveAnalysis.duplicateEdges;
 
+  function renderSummaryCard(label, value, caption) {
+    const isIdentityCard = label === "UID";
+
+    return (
+      <div className={`summary-card ${isIdentityCard ? "identity-card" : ""}`} key={label}>
+        <p className="summary-title">{label}</p>
+        {isIdentityCard ? (
+          <div className="identity-value">
+            <span className="identity-name">{value}</span>
+          </div>
+        ) : (
+          <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
+        )}
+        <p className="summary-caption">{caption}</p>
+      </div>
+    );
+  }
+
   return (
     <main className="dashboard-shell">
       {/* ── SIDEBAR ─────────────────────────── */}
@@ -614,13 +632,7 @@ export default function HomePage() {
                       </div>
                     </div>
                     <div className="summary-cards">
-                      {summaryCards.map(([label, value, caption]) => (
-                        <div className="summary-card" key={label}>
-                          <p className="summary-title">{label}</p>
-                          <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
-                          <p className="summary-caption">{caption}</p>
-                        </div>
-                      ))}
+                      {summaryCards.map(([label, value, caption]) => renderSummaryCard(label, value, caption))}
                     </div>
                   </section>
                 </div>
@@ -667,13 +679,7 @@ export default function HomePage() {
               </div>
             </div>
             <div className="summary-cards">
-              {summaryCards.map(([label, value, caption]) => (
-                <div className="summary-card" key={label}>
-                  <p className="summary-title">{label}</p>
-                  <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
-                  <p className="summary-caption">{caption}</p>
-                </div>
-              ))}
+              {summaryCards.map(([label, value, caption]) => renderSummaryCard(label, value, caption))}
             </div>
             <div className="notes-list">
               <p className="note-line">

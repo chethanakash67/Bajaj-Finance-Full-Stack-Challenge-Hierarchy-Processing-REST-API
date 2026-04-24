@@ -868,6 +868,29 @@ button {
   font-size: clamp(1rem, 1.6vw, 1.3rem);
 }
 
+.summary-card.identity-card .summary-caption {
+  margin-top: 0.55rem;
+}
+
+.identity-value {
+  margin-top: 0.45rem;
+  min-height: 3.5rem;
+  display: flex;
+  align-items: flex-start;
+}
+
+.identity-name {
+  display: block;
+  font-size: clamp(1.15rem, 1.7vw, 1.65rem);
+  line-height: 1.15;
+  font-weight: 800;
+  font-family: var(--font-display);
+  color: var(--cyan);
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
 .summary-caption {
   margin-top: 0.3rem;
   font-size: 0.82rem;
