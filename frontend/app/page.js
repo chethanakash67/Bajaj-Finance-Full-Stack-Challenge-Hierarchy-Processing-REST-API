@@ -52,9 +52,9 @@ const GITHUB_REPO_URL =
 const INITIAL_STATUS = "Ready to analyze your graph.";
 const EDGE_PATTERN = /^([A-Z])\s*->\s*([A-Z])$/;
 const USER_PROFILE = {
-  user_id: "yourname_ddmmyyyy",
-  email_id: "yourmail@college.edu",
-  college_roll_number: "YOUR_ROLL_NUMBER",
+  user_id: "G CHETHAN AKASH",
+  email_id: "ga0822@srmist.edu.in",
+  college_roll_number: "RA2311028010059",
 };
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", targetId: "dashboard-section" },

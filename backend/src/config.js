@@ -21,18 +21,18 @@ function getEnvValue(key, fallback, warning) {
 const USER_DETAILS = {
   user_id: getEnvValue(
     "USER_ID",
-    "yourname_ddmmyyyy",
-    '[config] USER_ID is not set. Using fallback "yourname_ddmmyyyy".'
+    "G_CHETHAN_AKASH",
+    '[config] USER_ID is not set. Using fallback "G_CHETHAN_AKASH".'
   ),
   email_id: getEnvValue(
     "EMAIL_ID",
-    "yourmail@college.edu",
-    '[config] EMAIL_ID is not set. Using fallback "yourmail@college.edu".'
+    "ga0822@srmist.edu.in",
+    '[config] EMAIL_ID is not set. Using fallback "ga0822@srmist.edu.in".'
   ),
   college_roll_number: getEnvValue(
     "COLLEGE_ROLL_NUMBER",
-    "YOUR_ROLL_NUMBER",
-    '[config] COLLEGE_ROLL_NUMBER is not set. Using fallback "YOUR_ROLL_NUMBER".'
+    "RA2311028010059",
+    '[config] COLLEGE_ROLL_NUMBER is not set. Using fallback "RA2311028010059".'
   ),
 };
 
