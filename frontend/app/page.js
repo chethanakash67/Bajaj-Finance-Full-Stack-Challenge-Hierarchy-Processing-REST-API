@@ -56,6 +56,12 @@ const USER_PROFILE = {
   email_id: "yourmail@college.edu",
   college_roll_number: "YOUR_ROLL_NUMBER",
 };
+const NAV_ITEMS = [
+  { key: "dashboard", label: "Dashboard", targetId: "dashboard-section" },
+  { key: "hidden-tests", label: "Hidden Tests", targetId: "hidden-tests-section" },
+  { key: "validation", label: "Validation", targetId: "validation-section" },
+  { key: "deployment", label: "Deployment", targetId: "deployment-section" },
+];
 
 function parseEdges(rawText) {
   if (rawText.trim().length === 0) {
@@ -107,23 +113,25 @@ function formatJson(response) {
   return JSON.stringify(response, null, 2);
 }
 
-function TreeNode({ nodeName, subtree }) {
+function TreeDiagramNode({ nodeName, subtree }) {
   const children = Object.entries(subtree);
 
   return (
-    <li className="tree-node">
-      <div className="tree-node-row">
+    <div className={`tree-diagram-node ${children.length > 0 ? "has-children" : ""}`}>
+      <div className="tree-badge">
         <span className="tree-dot" />
         <span className="tree-label">{nodeName}</span>
       </div>
       {children.length > 0 ? (
-        <ul>
+        <div className="tree-diagram-children">
           {children.map(([childName, childTree]) => (
-            <TreeNode key={childName} nodeName={childName} subtree={childTree} />
+            <div className="tree-diagram-child" key={childName}>
+              <TreeDiagramNode nodeName={childName} subtree={childTree} />
+            </div>
           ))}
-        </ul>
+        </div>
       ) : null}
-    </li>
+    </div>
   );
 }
 
@@ -135,6 +143,7 @@ export default function HomePage() {
   const [response, setResponse] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copyToast, setCopyToast] = useState("");
+  const [activeNav, setActiveNav] = useState("dashboard");
 
   const parsedLines = parseEdges(input);
   const liveAnalysis = analyzeInput(parsedLines);
@@ -217,6 +226,14 @@ export default function HomePage() {
     setStatus(INITIAL_STATUS);
   }
 
+  function handleNavClick(item) {
+    setActiveNav(item.key);
+    const element = document.getElementById(item.targetId);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
   const summaryCards = response
     ? [
         ["UID", response.user_id, "Identity tag"],
@@ -240,14 +257,20 @@ export default function HomePage() {
         <div>
           <div className="brand-mark">BF</div>
           <nav className="nav-list">
-            <div className="nav-item active">Dashboard</div>
-            <div className="nav-item">Hidden Tests</div>
-            <div className="nav-item">Validation</div>
-            <div className="nav-item">Deployment</div>
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={`nav-item ${activeNav === item.key ? "active" : ""}`}
+                onClick={() => handleNavClick(item)}
+              >
+                {item.label}
+              </button>
+            ))}
           </nav>
         </div>
 
-        <div className="sidebar-stack">
+        <div className="sidebar-stack" id="deployment-section">
           <div className="sidebar-note">
             <p className="sidebar-label">Hosted API URL</p>
             <p className="sidebar-value break-text">{API_BASE_URL}</p>
@@ -281,7 +304,7 @@ export default function HomePage() {
           <div className="topbar-badge">Evaluator Ready</div>
         </header>
 
-        <section className="hero-strip">
+        <section className="hero-strip" id="dashboard-section">
           <div>
             <p className="eyebrow">SRM Full Stack Engineering Challenge</p>
             <h1>Hierarchy Intelligence Dashboard</h1>
@@ -303,7 +326,7 @@ export default function HomePage() {
         </section>
 
         <section className="dashboard-grid">
-          <article className="panel compose-panel">
+          <article className="panel compose-panel" id="hidden-tests-section">
             <div className="panel-header">
               <div>
                 <p className="panel-kicker">Input Console</p>
@@ -413,7 +436,7 @@ export default function HomePage() {
               {summaryCards.map(([label, value, caption]) => (
                 <div className="summary-card" key={label}>
                   <p className="summary-title">{label}</p>
-                  <p className="value">{value}</p>
+                  <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
                   <p className="summary-caption">{caption}</p>
                 </div>
               ))}
@@ -425,7 +448,7 @@ export default function HomePage() {
             </div>
           </article>
 
-          <article className="panel detail-panel">
+          <article className="panel detail-panel" id="validation-section">
             <div className="panel-header">
               <div>
                 <p className="panel-kicker">Validation Feed</p>
@@ -497,9 +520,9 @@ export default function HomePage() {
                       </div>
                     ) : (
                       <div className="tree-view">
-                        <ul>
-                          <TreeNode nodeName={hierarchy.root} subtree={hierarchy.tree} />
-                        </ul>
+                        <div className="tree-canvas">
+                          <TreeDiagramNode nodeName={hierarchy.root} subtree={hierarchy.tree} />
+                        </div>
                       </div>
                     )}
                   </div>

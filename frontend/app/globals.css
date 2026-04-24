@@ -89,18 +89,27 @@ select {
 }
 
 .nav-item {
+  appearance: none;
+  text-align: left;
+  width: 100%;
   color: var(--muted);
   padding: 0.95rem 1rem;
   border-radius: 16px;
   background: transparent;
   border-left: 3px solid transparent;
   font-size: 0.96rem;
+  box-shadow: none;
 }
 
 .nav-item.active {
   color: var(--text);
   background: rgba(255, 255, 255, 0.03);
   border-left-color: var(--accent);
+}
+
+.nav-item:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .sidebar-note {
@@ -529,6 +538,7 @@ button:disabled {
   border-radius: 18px;
   background: var(--panel-strong);
   padding: 1rem;
+  min-width: 0;
 }
 
 .summary-card p,
@@ -545,8 +555,14 @@ button:disabled {
 
 .summary-card .value {
   margin-top: 0.35rem;
-  font-size: 1.9rem;
+  font-size: clamp(1.6rem, 2.5vw, 2.3rem);
   font-weight: 700;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.summary-card .value.compact {
+  font-size: clamp(1.1rem, 1.8vw, 1.45rem);
 }
 
 .summary-caption {
@@ -634,74 +650,121 @@ button:disabled {
   max-width: 100%;
 }
 
-.tree-view ul,
-.tree-view li {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.tree-view ul {
-  position: relative;
-}
-
-.tree-view > ul {
-  padding-left: 0;
-}
-
-.tree-node {
-  position: relative;
-  padding-left: 1.2rem;
-}
-
-.tree-node:not(:last-child)::before {
-  content: "";
-  position: absolute;
-  left: 0.35rem;
-  top: 1.2rem;
-  bottom: -0.6rem;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.13);
-}
-
-.tree-node > ul {
-  margin-left: 0.75rem;
-  padding-left: 1rem;
-}
-
-.tree-node-row {
-  position: relative;
-  min-height: 1.8rem;
+.tree-canvas {
   display: flex;
-  align-items: center;
-  gap: 0.55rem;
+  justify-content: center;
+  align-items: flex-start;
+  min-width: max-content;
+  padding: 0.5rem 0.25rem;
 }
 
-.tree-node-row::before {
+.tree-diagram-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tree-badge {
+  position: relative;
+  min-width: 64px;
+  padding: 0.9rem 1.1rem;
+  border-radius: 20px;
+  background: #2a2d35;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.tree-diagram-node.has-children > .tree-badge::after {
   content: "";
   position: absolute;
-  left: -0.85rem;
-  top: 50%;
-  width: 0.85rem;
+  top: 100%;
+  left: 50%;
+  width: 2px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateX(-50%);
+}
+
+.tree-diagram-children {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 20px;
+  padding-top: 20px;
+}
+
+.tree-diagram-children::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateX(-50%);
+}
+
+.tree-diagram-child {
+  position: relative;
+  padding: 0 0.35rem;
+}
+
+.tree-diagram-child::before,
+.tree-diagram-child::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 50%;
   height: 1px;
-  background: rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.tree-diagram-child::before {
+  right: 50%;
+}
+
+.tree-diagram-child::after {
+  left: 50%;
+}
+
+.tree-diagram-child:first-child::before,
+.tree-diagram-child:last-child::after,
+.tree-diagram-child:only-child::before,
+.tree-diagram-child:only-child::after {
+  display: none;
+}
+
+.tree-diagram-child > .tree-diagram-node::before {
+  content: "";
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  width: 2px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateX(-50%);
 }
 
 .tree-dot {
-  width: 10px;
-  height: 10px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   background: var(--accent);
-  box-shadow: 0 0 0 4px rgba(255, 77, 79, 0.12);
+  box-shadow: 0 0 0 7px rgba(255, 77, 79, 0.1);
 }
 
 .tree-label {
   display: inline-flex;
   min-width: 34px;
   justify-content: center;
-  border-radius: 10px;
-  padding: 0.35rem 0.55rem;
-  background: rgba(255, 255, 255, 0.05);
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .json-output {
@@ -775,5 +838,13 @@ button:disabled {
   .hero-strip,
   .sidebar {
     border-radius: 20px;
+  }
+
+  .tree-canvas {
+    justify-content: flex-start;
+  }
+
+  .tree-label {
+    font-size: 1.6rem;
   }
 }
