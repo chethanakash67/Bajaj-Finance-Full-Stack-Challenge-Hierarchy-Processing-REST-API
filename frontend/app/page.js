@@ -1,48 +1,6 @@
 "use client";
 
 import { useState } from "react";
-
-const SAMPLE_SETS = {
-  "Official Sample": `A->B
-A->C
-B->D
-C->E
-E->F
-X->Y
-Y->Z
-Z->X
-P->Q
-Q->R
-G->H
-G->H
-G->I
-hello
-1->2
-A->`,
-  "Invalid Entries": `hello
-1->2
-AB->C
-A-B
-A->
-A->A`,
-  "Duplicate Edges": `A->B
-A->B
-A->B
-B->C`,
-  "Self Loop": `A->A
-A->B`,
-  "Pure Cycle": `X->Y
-Y->Z
-Z->X`,
-  "Multi Parent": `A->D
-B->D
-D->E`,
-  "Tie Breaker": `A->B
-C->D`,
-  "Empty Input": ``,
-};
-
-const DEFAULT_SAMPLE_NAME = "Official Sample";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://bajaj-finance-full-stack-challenge.onrender.com";
 const API_ENDPOINT_DISPLAY =
@@ -69,10 +27,9 @@ function formatDisplayName(name) {
 }
 
 const NAV_ITEMS = [
-  { key: "dashboard",    label: "Dashboard",    targetId: "dashboard-section"    },
-  { key: "hidden-tests", label: "Hidden Tests",  targetId: "hidden-tests-section" },
-  { key: "validation",   label: "Validation",   targetId: "validation-section"   },
-  { key: "deployment",   label: "Deployment",   targetId: "deployment-section"   },
+  { key: "dashboard",  label: "Dashboard",  targetId: "dashboard-section" },
+  { key: "validation", label: "Validation", targetId: "validation-section" },
+  { key: "deployment", label: "Deployment", targetId: "deployment-section" },
 ];
 
 function parseEdges(rawText) {
@@ -146,14 +103,13 @@ function TreeDiagramNode({ nodeName, subtree }) {
 }
 
 export default function HomePage() {
-  const [selectedSample, setSelectedSample] = useState(DEFAULT_SAMPLE_NAME);
-  const [input, setInput]                   = useState(SAMPLE_SETS[DEFAULT_SAMPLE_NAME]);
-  const [status, setStatus]                 = useState(INITIAL_STATUS);
-  const [error, setError]                   = useState("");
-  const [response, setResponse]             = useState(null);
-  const [isLoading, setIsLoading]           = useState(false);
-  const [copyToast, setCopyToast]           = useState("");
-  const [activeNav, setActiveNav]           = useState("dashboard");
+  const [input, setInput] = useState("");
+  const [status, setStatus] = useState(INITIAL_STATUS);
+  const [error, setError] = useState("");
+  const [response, setResponse] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [copyToast, setCopyToast] = useState("");
+  const [activeNav, setActiveNav] = useState("dashboard");
 
   const parsedLines    = parseEdges(input);
   const liveAnalysis   = analyzeInput(parsedLines);
@@ -204,19 +160,8 @@ export default function HomePage() {
     window.setTimeout(() => setCopyToast(""), 2000);
   }
 
-  function handleSampleChange(event) {
-    const next = event.target.value;
-    setSelectedSample(next);
-    setInput(SAMPLE_SETS[next] ?? input);
-    setResponse(null);
-    setError("");
-    setCopyToast("");
-    setStatus(`${next} loaded.`);
-  }
-
   function handleClear() {
     setInput("");
-    setSelectedSample("Custom");
     setResponse(null);
     setError("");
     setCopyToast("");
@@ -343,30 +288,23 @@ export default function HomePage() {
         <section className="dashboard-grid">
 
           {/* ── COMPOSE ─────────────────────── */}
-          <article className="panel compose-panel" id="hidden-tests-section">
+          <article className="panel compose-panel">
             <div className="panel-header">
               <div>
                 <p className="panel-kicker">Input Console</p>
                 <h2>Edge Submission</h2>
               </div>
-              <span className="panel-pill">{selectedSample}</span>
+              <span className="panel-pill">Manual Input Only</span>
             </div>
 
             <form className="form-layout" onSubmit={handleSubmit}>
               <div className="field-grid">
-                <div>
-                  <label htmlFor="hidden-sample-select">Test Dataset</label>
-                  <select
-                    id="hidden-sample-select"
-                    className="dashboard-select"
-                    value={selectedSample}
-                    onChange={handleSampleChange}
-                  >
-                    {Object.keys(SAMPLE_SETS).map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                    <option value="Custom">Custom</option>
-                  </select>
+                <div className="helper-box helper-box-wide">
+                  <p className="helper-title">Manual Detection</p>
+                  <p className="helper-text">
+                    Enter your own edges only. The app will automatically detect valid trees,
+                    cyclic groups, invalid entries, and duplicate edges from what you type.
+                  </p>
                 </div>
                 <div className="helper-box">
                   <p className="helper-title">Depth Rule</p>
@@ -384,10 +322,7 @@ export default function HomePage() {
                   rows={12}
                   spellCheck="false"
                   value={input}
-                  onChange={(e) => {
-                    setSelectedSample("Custom");
-                    setInput(e.target.value);
-                  }}
+                  onChange={(e) => setInput(e.target.value)}
                   placeholder={"A->B\nA->C\nB->D"}
                   style={{ minHeight: "260px" }}
                 />
@@ -417,13 +352,6 @@ export default function HomePage() {
                   ) : (
                     "▶ Submit to API"
                   )}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => handleSampleChange({ target: { value: DEFAULT_SAMPLE_NAME } })}
-                >
-                  Load Official Sample
                 </button>
                 <button type="button" className="ghost-button" onClick={handleClear}>
                   Clear
