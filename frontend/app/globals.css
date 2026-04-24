@@ -480,6 +480,26 @@ button, textarea, select { font: inherit; }
 .hierarchy-panel{ grid-area: hierarchy; }
 .json-panel     { grid-area: json; }
 
+.hierarchy-fallback-active .hierarchy-list {
+  display: block;
+}
+
+.hierarchy-fallback-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.fallback-block {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.fallback-header {
+  margin-bottom: 1rem;
+}
+
 /* ── PANEL ───────────────────────────────────────────── */
 .panel {
   background: var(--panel);

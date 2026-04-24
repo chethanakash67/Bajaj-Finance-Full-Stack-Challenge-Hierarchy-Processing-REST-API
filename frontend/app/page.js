@@ -115,6 +115,9 @@ export default function HomePage() {
   const liveAnalysis   = analyzeInput(parsedLines);
   const totalParsedLines = parsedLines.length;
   const jsonString     = response ? JSON.stringify(response, null, 2) : null;
+  const renderableTrees = response ? response.hierarchies.filter((h) => !h.has_cycle) : [];
+  const hasRenderableTrees = renderableTrees.length > 0;
+  const showHierarchyFallback = !response || !hasRenderableTrees;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -388,6 +391,7 @@ export default function HomePage() {
           </article>
 
           {/* ── SUMMARY ─────────────────────── */}
+          {!showHierarchyFallback && (
           <article className="panel summary-panel">
             <div className="panel-header">
               <div>
@@ -418,8 +422,10 @@ export default function HomePage() {
               </p>
             </div>
           </article>
+          )}
 
           {/* ── VALIDATION ──────────────────── */}
+          {!showHierarchyFallback && (
           <article className="panel detail-panel" id="validation-section">
             <div className="panel-header">
               <div>
@@ -488,9 +494,10 @@ export default function HomePage() {
               </div>
             </div>
           </article>
+          )}
 
           {/* ── HIERARCHY ───────────────────── */}
-          <article className="panel hierarchy-panel">
+          <article className={`panel hierarchy-panel ${showHierarchyFallback ? "hierarchy-fallback-active" : ""}`} id="validation-section">
             <div className="panel-header">
               <div>
                 <p className="panel-kicker">Structured Insights</p>
@@ -527,7 +534,95 @@ export default function HomePage() {
             </div>
 
             <div className="hierarchy-list">
-              {response ? (
+              {showHierarchyFallback ? (
+                <div className="hierarchy-fallback-grid">
+                  <section className="fallback-block">
+                    <div className="panel-header fallback-header">
+                      <div>
+                        <p className="panel-kicker">At a Glance</p>
+                        <h2>Summary Board</h2>
+                      </div>
+                    </div>
+                    <div className="summary-cards">
+                      {summaryCards.map(([label, value, caption]) => (
+                        <div className="summary-card" key={label}>
+                          <p className="summary-title">{label}</p>
+                          <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
+                          <p className="summary-caption">{caption}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="fallback-block">
+                    <div className="panel-header fallback-header">
+                      <div>
+                        <p className="panel-kicker">Validation Feed</p>
+                        <h2>Issues Detected</h2>
+                      </div>
+                    </div>
+                    <div className="detail-columns">
+                      <div className="detail-box">
+                        <p className="detail-title">
+                          ✕ Invalid Entries{" "}
+                          {displayedInvalid.length > 0 && (
+                            <span style={{
+                              marginLeft: "0.5rem",
+                              background: "var(--red-soft)",
+                              color: "var(--red)",
+                              padding: "0.1rem 0.4rem",
+                              borderRadius: "6px",
+                              fontSize: "0.72rem",
+                              fontFamily: "var(--font-mono)",
+                            }}>{displayedInvalid.length}</span>
+                          )}
+                        </p>
+                        <p className="detail-explainer">
+                          Trimmed before validation. Empty lines, malformed arrows, and self-loops land here.
+                        </p>
+                        {displayedInvalid.length > 0 ? (
+                          <div className="token-list">
+                            {displayedInvalid.map((entry, i) => (
+                              <span className="token error-token" key={`${entry}-${i}`}>{entry}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="empty-state">No invalid entries detected.</p>
+                        )}
+                      </div>
+
+                      <div className="detail-box">
+                        <p className="detail-title">
+                          ⚠ Duplicate Edges{" "}
+                          {displayedDuplicates.length > 0 && (
+                            <span style={{
+                              marginLeft: "0.5rem",
+                              background: "var(--orange-soft)",
+                              color: "var(--orange)",
+                              padding: "0.1rem 0.4rem",
+                              borderRadius: "6px",
+                              fontSize: "0.72rem",
+                              fontFamily: "var(--font-mono)",
+                            }}>{displayedDuplicates.length}</span>
+                          )}
+                        </p>
+                        <p className="detail-explainer">
+                          Only repeated exact edges are listed — even if an edge appears many times.
+                        </p>
+                        {displayedDuplicates.length > 0 ? (
+                          <div className="token-list">
+                            {displayedDuplicates.map((entry, i) => (
+                              <span className="token warning-token" key={`${entry}-${i}`}>{entry}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="empty-state">No duplicate edges detected.</p>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              ) : (
                 response.hierarchies.map((h) => (
                   <div className="hierarchy-card" key={h.root}>
                     <div className="hierarchy-topline">
@@ -556,10 +651,6 @@ export default function HomePage() {
                     )}
                   </div>
                 ))
-              ) : (
-                <p className="empty-state" style={{ padding: "1.5rem 0" }}>
-                  Submit a payload to render hierarchy cards for each connected component.
-                </p>
               )}
             </div>
           </article>
