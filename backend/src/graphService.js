@@ -1,11 +1,11 @@
-const EDGE_PATTERN = /^([A-Z])->([A-Z])$/;
+const EDGE_PATTERN = /^([A-Z])\s*->\s*([A-Z])$/;
 
 function normalizeEntry(entry) {
   if (typeof entry !== "string") {
     return "";
   }
 
-  return entry.trim();
+  return entry.replace(/\s+/g, " ").trim();
 }
 
 function parseValidEdges(entries) {
@@ -156,10 +156,17 @@ function buildTreeStructure(root, adjacency) {
 }
 
 function calculateDepth(root, adjacency) {
+  const depthCache = new Map();
+
   function dfs(node) {
+    if (depthCache.has(node)) {
+      return depthCache.get(node);
+    }
+
     const children = adjacency.get(node) || [];
 
     if (children.length === 0) {
+      depthCache.set(node, 1);
       return 1;
     }
 
@@ -168,7 +175,9 @@ function calculateDepth(root, adjacency) {
       longest = Math.max(longest, dfs(child));
     }
 
-    return longest + 1;
+    const depth = longest + 1;
+    depthCache.set(node, depth);
+    return depth;
   }
 
   return dfs(root);
@@ -215,7 +224,10 @@ function buildHierarchyResponse(acceptedEdges) {
     const hasCycle = detectCycleInComponent(adjacency, componentNodeSet);
 
     if (hasCycle) {
-      const root = roots.length > 0 ? roots[0] : componentNodes[0];
+      const root =
+        roots.length > 0
+          ? [...roots].sort()[0]
+          : [...componentNodes].sort()[0];
       hierarchies.push({
         root,
         tree: {},

@@ -1,11 +1,21 @@
 # SRM Full Stack Engineering Challenge
 
-This repository now contains two separate apps:
+A deployment-ready full-stack submission for the SRM Full Stack Engineering Challenge.
 
-- `backend/`: Express API for deployment on Render
-- `frontend/`: Next.js app for deployment on Vercel
+- Frontend: Next.js dashboard for Vercel
+- Backend: Node.js + Express API for Render
+- Endpoint: `POST /bfhl`
 
-The backend exposes `POST /bfhl` and the frontend calls it through an environment-configured base URL.
+## Hosted URLs
+
+- Hosted frontend URL: `https://your-vercel-app.vercel.app`
+- Hosted API base URL: `https://your-render-backend.onrender.com`
+- GitHub repo URL: `https://github.com/your-username/your-repo`
+
+Update those values in:
+
+- [frontend/.env.local.example](/Users/chethanakash/Desktop/bajaj%20finance/frontend/.env.local.example:1)
+- [backend/.env.example](/Users/chethanakash/Desktop/bajaj%20finance/backend/.env.example:1)
 
 ## Project Structure
 
@@ -15,10 +25,14 @@ The backend exposes `POST /bfhl` and the frontend calls it through an environmen
 │   ├── package.json
 │   ├── scripts
 │   │   └── runSample.js
-│   └── src
-│       ├── config.js
-│       ├── graphService.js
-│       └── server.js
+│   ├── src
+│   │   ├── app.js
+│   │   ├── config.js
+│   │   ├── graphService.js
+│   │   └── server.js
+│   └── test
+│       ├── api.test.js
+│       └── graphService.test.js
 ├── frontend
 │   ├── app
 │   │   ├── globals.css
@@ -29,32 +43,25 @@ The backend exposes `POST /bfhl` and the frontend calls it through an environmen
 └── README.md
 ```
 
-## Replace Your Personal Details
+## Backend Identity Fields
 
-Update the placeholders in [backend/src/config.js](/Users/chethanakash/Desktop/bajaj%20finance/backend/src/config.js:1):
+The API response includes:
 
-```js
-const USER_DETAILS = {
-  user_id: "yourname_ddmmyyyy",
-  email_id: "yourmail@college.edu",
-  college_roll_number: "YOUR_ROLL_NUMBER",
-};
+- `user_id`
+- `email_id`
+- `college_roll_number`
+
+These are configurable through environment variables in [backend/src/config.js](/Users/chethanakash/Desktop/bajaj%20finance/backend/src/config.js:1):
+
+```bash
+USER_ID=fullname_ddmmyyyy
+EMAIL_ID=yourmail@college.edu
+COLLEGE_ROLL_NUMBER=YOUR_ROLL_NUMBER
 ```
 
-Replace:
+If they are not set, the backend falls back to placeholders and logs a warning.
 
-- `yourname_ddmmyyyy` with your `fullname_ddmmyyyy`
-- `yourmail@college.edu` with your real email
-- `YOUR_ROLL_NUMBER` with your roll number
-
-## Tech Stack
-
-- Backend: Node.js, Express, CORS
-- Frontend: Next.js, React
-- Styling: plain CSS
-- Deployment target: Render for backend, Vercel for frontend
-
-## Backend API
+## API Details
 
 ### Endpoint
 
@@ -71,84 +78,31 @@ Content-Type: application/json
 }
 ```
 
-### Response Fields
+### Validation Rules
 
-- `user_id`
-- `email_id`
-- `college_roll_number`
-- `hierarchies`
-- `invalid_entries`
-- `duplicate_edges`
-- `summary`
+- Input is trimmed before validation
+- Valid format is only single uppercase letter to single uppercase letter, like `A->B`
+- Spacing like `A -> B` is accepted and normalized
+- Invalid examples: `hello`, `1->2`, `AB->C`, `A-B`, `A->`, `A->A`, empty string
+- Self-loops are treated as invalid, not cyclic
+- Duplicate edges use the first occurrence and appear only once in `duplicate_edges`
+- Multi-parent children keep the first valid parent and silently discard later parent edges
+- Pure cycles use the lexicographically smallest node as root
+- Any connected component containing a cycle returns:
 
-### Rules Implemented
-
-- Only `X->Y` is valid where both sides are single uppercase letters
-- Leading and trailing spaces are trimmed before validation
-- Self-loop edges like `A->A` are invalid
-- Duplicate edges are processed only once and reported once
-- If a node gets multiple parents, the first valid parent wins
-- Multiple independent groups are supported
-- Root means a node that never appears as a child
-- Pure cycles fall back to the lexicographically smallest node as root
-- Cyclic groups return `has_cycle: true` and no `depth`
-- Non-cyclic trees return `depth`
-- `summary.total_trees`, `summary.total_cycles`, and `summary.largest_tree_root` are computed dynamically
-
-## Run Locally
-
-### 1. Start the backend
-
-```bash
-cd "/Users/chethanakash/Desktop/bajaj finance/backend"
-npm install
-npm run dev
+```json
+{
+  "root": "X",
+  "tree": {},
+  "has_cycle": true
+}
 ```
 
-Backend URL:
-
-```text
-http://localhost:3000
-```
-
-### 2. Start the frontend
-
-In a second terminal:
-
-```bash
-cd "/Users/chethanakash/Desktop/bajaj finance/frontend"
-npm install
-cp .env.local.example .env.local
-npm run dev
-```
-
-Frontend URL:
-
-```text
-http://localhost:3001
-```
-
-## Frontend Environment Variable
-
-Set this in [frontend/.env.local.example](/Users/chethanakash/Desktop/bajaj%20finance/frontend/.env.local.example:1) or Vercel project settings:
-
-```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
-```
-
-For production, replace it with your deployed Render backend URL.
-
-## Backend Environment Variables
-
-Use [backend/.env.example](/Users/chethanakash/Desktop/bajaj%20finance/backend/.env.example:1) as reference:
-
-```bash
-PORT=3000
-HOST=0.0.0.0
-FRONTEND_URL=http://localhost:3001
-```
-
-For production, set `FRONTEND_URL` to your Vercel domain to keep CORS tight.
+- Cyclic groups do not include `depth`
+- Non-cyclic trees include `depth`
+- `summary.total_trees` counts only valid non-cyclic trees
+- `summary.total_cycles` counts cyclic groups
+- `summary.largest_tree_root` picks the deepest tree root, breaking ties lexicographically
 
 ## Sample Request
 
@@ -230,7 +184,53 @@ For production, set `FRONTEND_URL` to your Vercel domain to keep CORS tight.
 }
 ```
 
-## Test with cURL
+## Local Setup
+
+### Backend
+
+```bash
+cd "/Users/chethanakash/Desktop/bajaj finance/backend"
+npm install
+npm run dev
+```
+
+Backend runs at `http://localhost:3000`.
+
+### Frontend
+
+```bash
+cd "/Users/chethanakash/Desktop/bajaj finance/frontend"
+npm install
+cp .env.local.example .env.local
+npm run dev
+```
+
+Frontend runs at `http://localhost:3001`.
+
+## Test Commands
+
+Backend sample verification:
+
+```bash
+cd "/Users/chethanakash/Desktop/bajaj finance/backend"
+npm run test:sample
+```
+
+Backend automated tests:
+
+```bash
+cd "/Users/chethanakash/Desktop/bajaj finance/backend"
+npm test
+```
+
+Frontend production build check:
+
+```bash
+cd "/Users/chethanakash/Desktop/bajaj finance/frontend"
+npm run build
+```
+
+## cURL Example
 
 ```bash
 curl -X POST http://localhost:3000/bfhl \
@@ -246,28 +246,21 @@ curl -X POST http://localhost:3000/bfhl \
   }'
 ```
 
-## Test with Postman
+## Postman
 
 1. Create a `POST` request to `http://localhost:3000/bfhl`
-2. Set `Content-Type: application/json`
+2. Add header `Content-Type: application/json`
 3. Choose `Body -> raw -> JSON`
-4. Paste the sample request
+4. Paste the sample request body
 5. Send the request
-
-## Verify the Backend Sample Quickly
-
-```bash
-cd "/Users/chethanakash/Desktop/bajaj finance/backend"
-npm run test:sample
-```
 
 ## Deployment
 
-### Deploy Backend on Render
+### Render Backend
 
-1. Push the repo to GitHub
+1. Push the repository to GitHub
 2. Create a new Render Web Service
-3. Set the root directory to `backend`
+3. Set root directory to `backend`
 4. Build command: `npm install`
 5. Start command: `npm start`
 6. Add environment variables:
@@ -276,22 +269,31 @@ npm run test:sample
 PORT=3000
 HOST=0.0.0.0
 FRONTEND_URL=https://your-vercel-app.vercel.app
+USER_ID=fullname_ddmmyyyy
+EMAIL_ID=yourmail@college.edu
+COLLEGE_ROLL_NUMBER=YOUR_ROLL_NUMBER
+HOSTED_FRONTEND_URL=https://your-vercel-app.vercel.app
+HOSTED_API_URL=https://your-render-backend.onrender.com
+GITHUB_REPO_URL=https://github.com/your-username/your-repo
 ```
 
-### Deploy Frontend on Vercel
+### Vercel Frontend
 
-1. Import the same repo into Vercel
-2. Set the root directory to `frontend`
-3. Add environment variable:
+1. Import the same repository into Vercel
+2. Set root directory to `frontend`
+3. Add environment variables:
 
 ```text
 NEXT_PUBLIC_API_BASE_URL=https://your-render-backend.onrender.com
+NEXT_PUBLIC_FRONTEND_URL=https://your-vercel-app.vercel.app
+NEXT_PUBLIC_GITHUB_REPO_URL=https://github.com/your-username/your-repo
 ```
 
 4. Deploy
 
 ## Notes
 
-- The backend response is fully dynamic and not hardcoded
-- The sample challenge logic matches the expected output
-- The implementation comfortably handles the stated input size
+- CORS is enabled in the backend
+- `POST /bfhl` accepts `application/json`
+- The response is dynamic and not hardcoded
+- The implementation is designed for the challenge limit of up to 50 nodes
