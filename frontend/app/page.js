@@ -193,6 +193,23 @@ function flattenTree(root, subtree) {
   return { nodes, edges };
 }
 
+function buildLineageFromTree(root, subtree) {
+  if (!root) return {};
+  const lineageByNode = {};
+
+  function walk(name, branch, trail) {
+    const nextTrail = [...trail, name];
+    lineageByNode[name] = nextTrail;
+
+    for (const [childName, childBranch] of Object.entries(branch || {})) {
+      walk(childName, childBranch, nextTrail);
+    }
+  }
+
+  walk(root, subtree || {}, []);
+  return lineageByNode;
+}
+
 /* ═══════════════════════════════════════════════════════════
    SVG TREE — Multi-View Graph Canvas
    ═══════════════════════════════════════════════════════════ */
@@ -910,14 +927,29 @@ export default function HomePage() {
   const selectedHierarchy = selectedRoot
     ? response?.hierarchies?.find((hierarchy) => hierarchy.root === selectedRoot) || null
     : null;
-  const selectedTreeNodes =
-    selectedComponent?.type === "tree"
-      ? [...(selectedComponent.nodes || [])].sort()
-      : [];
+  const selectedIsTree = Boolean(
+    selectedHierarchy &&
+    !selectedHierarchy.has_cycle &&
+    (!selectedComponent || selectedComponent.type === "tree")
+  );
+  const selectedLineage = useMemo(() => {
+    if (!selectedIsTree) {
+      return {};
+    }
+
+    return selectedComponent?.lineage || buildLineageFromTree(selectedHierarchy.root, selectedHierarchy.tree);
+  }, [selectedIsTree, selectedComponent, selectedHierarchy]);
+  const selectedTreeNodes = useMemo(() => {
+    if (!selectedIsTree) {
+      return EMPTY_ARRAY;
+    }
+
+    return [...new Set([...(selectedComponent?.nodes || EMPTY_ARRAY), ...Object.keys(selectedLineage)])].sort();
+  }, [selectedIsTree, selectedComponent, selectedLineage]);
   const selectedTopBottlenecks = selectedComponent?.top_central_nodes || [];
   const globalTopBottlenecks = graphCentrality?.bottlenecks?.slice(0, 5) || [];
   const playbackOrder =
-    selectedComponent?.type === "tree"
+    selectedIsTree && selectedComponent?.traversal
       ? selectedComponent.traversal?.[traversalMode] || []
       : [];
   const playbackNodes = useMemo(
@@ -1139,7 +1171,7 @@ export default function HomePage() {
   }
 
   function handleFindLca() {
-    if (selectedComponent?.type !== "tree") {
+    if (!selectedIsTree) {
       setLcaStatus("LCA is available only for non-cyclic tree components.");
       return;
     }
@@ -1149,7 +1181,7 @@ export default function HomePage() {
       return;
     }
 
-    const ancestor = findLowestCommonAncestor(selectedComponent.lineage, lcaFrom, lcaTo);
+    const ancestor = findLowestCommonAncestor(selectedLineage, lcaFrom, lcaTo);
 
     if (!ancestor) {
       setLcaStatus("No shared ancestor found in the selected component.");
@@ -1624,7 +1656,7 @@ export default function HomePage() {
                         className="control-select"
                         value={lcaFrom}
                         onChange={(event) => setLcaFrom(event.target.value)}
-                        disabled={selectedComponent?.type !== "tree"}
+                        disabled={!selectedIsTree}
                       >
                         <option value="">Select</option>
                         {selectedTreeNodes.map((node) => (
@@ -1639,7 +1671,7 @@ export default function HomePage() {
                         className="control-select"
                         value={lcaTo}
                         onChange={(event) => setLcaTo(event.target.value)}
-                        disabled={selectedComponent?.type !== "tree"}
+                        disabled={!selectedIsTree}
                       >
                         <option value="">Select</option>
                         {selectedTreeNodes.map((node) => (
@@ -1650,7 +1682,7 @@ export default function HomePage() {
                     <div className="insight-field insight-grow">
                       <label>Analytics Actions</label>
                       <div className="toolbar-actions">
-                        <button type="button" className="secondary-button" onClick={handleFindLca} disabled={selectedComponent?.type !== "tree"}>
+                        <button type="button" className="secondary-button" onClick={handleFindLca} disabled={!selectedIsTree}>
                           Find LCA
                         </button>
                       </div>
