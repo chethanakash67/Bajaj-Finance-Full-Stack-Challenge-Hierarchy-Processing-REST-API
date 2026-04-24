@@ -121,3 +121,22 @@ test("empty input is valid and returns empty summary", () => {
     largest_tree_root: null,
   });
 });
+
+test("centrality analytics are included and rank bottlenecks", () => {
+  const result = processGraphPayload({
+    data: ["A->B", "B->C", "C->D"],
+  });
+
+  assert.deepEqual(result.analytics.centrality.closeness, {
+    A: 0.5,
+    B: 0.6667,
+    C: 1,
+    D: 0,
+  });
+  assert.equal(result.analytics.centrality.bottlenecks[0].node, "C");
+  assert.equal(result.analytics.centrality.bottlenecks[0].component_root, "A");
+  assert.deepEqual(
+    result.analytics.connected_components[0].top_central_nodes.map((entry) => entry.node),
+    ["C", "B", "A"]
+  );
+});

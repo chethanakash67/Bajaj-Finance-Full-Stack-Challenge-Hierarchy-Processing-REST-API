@@ -359,6 +359,175 @@ function buildTraversalOrders(root, adjacency) {
   };
 }
 
+function roundMetric(value) {
+  return Number(value.toFixed(4));
+}
+
+function calculateClosenessCentrality(componentNodes, adjacency) {
+  const closeness = {};
+  const componentNodeSet = new Set(componentNodes);
+
+  for (const source of componentNodes) {
+    const queue = [source];
+    const distances = new Map([[source, 0]]);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+
+      for (const next of adjacency.get(current) || []) {
+        if (!componentNodeSet.has(next) || distances.has(next)) {
+          continue;
+        }
+
+        distances.set(next, distances.get(current) + 1);
+        queue.push(next);
+      }
+    }
+
+    let distanceSum = 0;
+    let reachableNodes = 0;
+
+    for (const [node, distance] of distances.entries()) {
+      if (node === source) {
+        continue;
+      }
+      distanceSum += distance;
+      reachableNodes += 1;
+    }
+
+    closeness[source] =
+      reachableNodes > 0 && distanceSum > 0
+        ? roundMetric(reachableNodes / distanceSum)
+        : 0;
+  }
+
+  return closeness;
+}
+
+function calculateBetweennessCentrality(componentNodes, adjacency) {
+  const componentNodeSet = new Set(componentNodes);
+  const betweenness = Object.fromEntries(componentNodes.map((node) => [node, 0]));
+
+  for (const source of componentNodes) {
+    const stack = [];
+    const predecessors = new Map(componentNodes.map((node) => [node, []]));
+    const shortestPathCounts = new Map(componentNodes.map((node) => [node, 0]));
+    const distances = new Map(componentNodes.map((node) => [node, -1]));
+    shortestPathCounts.set(source, 1);
+    distances.set(source, 0);
+
+    const queue = [source];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      stack.push(current);
+
+      for (const next of adjacency.get(current) || []) {
+        if (!componentNodeSet.has(next)) {
+          continue;
+        }
+
+        if (distances.get(next) < 0) {
+          queue.push(next);
+          distances.set(next, distances.get(current) + 1);
+        }
+
+        if (distances.get(next) === distances.get(current) + 1) {
+          shortestPathCounts.set(next, shortestPathCounts.get(next) + shortestPathCounts.get(current));
+          predecessors.get(next).push(current);
+        }
+      }
+    }
+
+    const dependency = new Map(componentNodes.map((node) => [node, 0]));
+
+    while (stack.length > 0) {
+      const node = stack.pop();
+
+      for (const predecessor of predecessors.get(node)) {
+        const contribution =
+          (shortestPathCounts.get(predecessor) / shortestPathCounts.get(node)) * (1 + dependency.get(node));
+        dependency.set(predecessor, dependency.get(predecessor) + contribution);
+      }
+
+      if (node !== source) {
+        betweenness[node] += dependency.get(node);
+      }
+    }
+  }
+
+  const normalizationFactor =
+    componentNodes.length > 2 ? (componentNodes.length - 1) * (componentNodes.length - 2) : 1;
+
+  for (const node of componentNodes) {
+    betweenness[node] = roundMetric(betweenness[node] / normalizationFactor);
+  }
+
+  return betweenness;
+}
+
+function buildCentralityMetrics(components, adjacency) {
+  const closeness = {};
+  const betweenness = {};
+  const bottlenecks = [];
+  const topNodesByComponent = {};
+
+  for (const componentNodes of components) {
+    const componentCloseness = calculateClosenessCentrality(componentNodes, adjacency);
+    const componentBetweenness = calculateBetweennessCentrality(componentNodes, adjacency);
+    const componentKey = componentNodes.join("|");
+    const rankedNodes = [...componentNodes]
+      .sort((left, right) => {
+        const betweennessDelta = componentBetweenness[right] - componentBetweenness[left];
+        if (betweennessDelta !== 0) {
+          return betweennessDelta;
+        }
+
+        const closenessDelta = componentCloseness[right] - componentCloseness[left];
+        if (closenessDelta !== 0) {
+          return closenessDelta;
+        }
+
+        return left.localeCompare(right);
+      })
+      .map((node) => {
+        const centralityNode = {
+          node,
+          component_key: componentKey,
+          betweenness: componentBetweenness[node],
+          closeness: componentCloseness[node],
+        };
+        closeness[node] = componentCloseness[node];
+        betweenness[node] = componentBetweenness[node];
+        bottlenecks.push(centralityNode);
+        return centralityNode;
+      });
+
+    topNodesByComponent[componentKey] = rankedNodes.slice(0, 3);
+  }
+
+  bottlenecks.sort((left, right) => {
+    const betweennessDelta = right.betweenness - left.betweenness;
+    if (betweennessDelta !== 0) {
+      return betweennessDelta;
+    }
+
+    const closenessDelta = right.closeness - left.closeness;
+    if (closenessDelta !== 0) {
+      return closenessDelta;
+    }
+
+    return left.node.localeCompare(right.node);
+  });
+
+  return {
+    closeness,
+    betweenness,
+    bottlenecks,
+    topNodesByComponent,
+  };
+}
+
 function buildLineageIndex(root, adjacency) {
   const lineageByNode = {};
 
@@ -379,15 +548,18 @@ function buildHierarchyResponse(acceptedEdges, selfLoops) {
   const { nodes, adjacency, reverseAdjacency, inDegree } = buildGraph(acceptedEdges);
   const components = buildConnectedComponents(adjacency, nodes);
   const stronglyConnectedComponents = tarjanStronglyConnectedComponents(adjacency, nodes);
+  const centrality = buildCentralityMetrics(components, adjacency);
   const hierarchies = [];
   const componentDetails = [];
   const cycleComponents = [];
+  const componentRootByKey = {};
   let totalTrees = 0;
   let totalCycles = 0;
   let largestTreeRoot = null;
   let largestTreeDepth = -1;
 
   for (const componentNodes of components) {
+    const componentKey = componentNodes.join("|");
     const roots = componentNodes.filter((node) => (inDegree.get(node) || 0) === 0);
     const componentSccs = stronglyConnectedComponents.filter((component) =>
       component.every((node) => componentNodes.includes(node))
@@ -398,6 +570,7 @@ function buildHierarchyResponse(acceptedEdges, selfLoops) {
       roots.length > 0
         ? [...roots].sort()[0]
         : [...componentNodes].sort()[0];
+    componentRootByKey[componentKey] = root;
     const componentEdges = acceptedEdges
       .filter(({ from, to }) => componentNodes.includes(from) && componentNodes.includes(to))
       .map(({ label }) => label)
@@ -421,6 +594,7 @@ function buildHierarchyResponse(acceptedEdges, selfLoops) {
         strongly_connected_components: cyclicSccs,
         cycle_path: cyclePath,
         breaking_link: breakingLink,
+        top_central_nodes: centrality.topNodesByComponent[componentKey] || [],
       });
 
       cycleComponents.push({
@@ -453,6 +627,7 @@ function buildHierarchyResponse(acceptedEdges, selfLoops) {
       depth,
       traversal,
       lineage,
+      top_central_nodes: centrality.topNodesByComponent[componentKey] || [],
     });
 
     totalTrees += 1;
@@ -469,6 +644,10 @@ function buildHierarchyResponse(acceptedEdges, selfLoops) {
   hierarchies.sort((left, right) => left.root.localeCompare(right.root));
   componentDetails.sort((left, right) => left.root.localeCompare(right.root));
   cycleComponents.sort((left, right) => left.root.localeCompare(right.root));
+  const centralityBottlenecks = centrality.bottlenecks.map((entry) => ({
+    ...entry,
+    component_root: componentRootByKey[entry.component_key] || null,
+  }));
 
   return {
     hierarchies,
@@ -484,6 +663,11 @@ function buildHierarchyResponse(acceptedEdges, selfLoops) {
       connected_components: componentDetails,
       cycle_components: cycleComponents,
       strongly_connected_components: stronglyConnectedComponents,
+      centrality: {
+        closeness: centrality.closeness,
+        betweenness: centrality.betweenness,
+        bottlenecks: centralityBottlenecks,
+      },
       parser: {
         vertices: nodes.size,
         edges: acceptedEdges.length,
@@ -518,6 +702,8 @@ function processGraphPayload(payload) {
 }
 
 module.exports = {
+  calculateBetweennessCentrality,
+  calculateClosenessCentrality,
   normalizeEntry,
   parseValidEdges,
   tarjanStronglyConnectedComponents,

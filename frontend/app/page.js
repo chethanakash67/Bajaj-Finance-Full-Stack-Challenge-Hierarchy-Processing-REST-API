@@ -39,6 +39,10 @@ function formatIdentityDisplay(rawValue) {
   return { displayName, numericSuffix };
 }
 
+function formatMetric(value) {
+  return Number(value || 0).toFixed(4).replace(/\.?0+$/, "");
+}
+
 function parseEdges(rawText) {
   if (rawText.trim().length === 0) return [];
   return rawText.split(/\n|,/).map((item) => item.trim());
@@ -142,6 +146,22 @@ function findShortestPath(adjacency, from, to) {
   }
 
   return [];
+}
+
+function findLowestCommonAncestor(lineageByNode, from, to) {
+  const fromPath = lineageByNode?.[from] || [];
+  const toPath = lineageByNode?.[to] || [];
+  const sharedLength = Math.min(fromPath.length, toPath.length);
+  let lca = null;
+
+  for (let index = 0; index < sharedLength; index += 1) {
+    if (fromPath[index] !== toPath[index]) {
+      break;
+    }
+    lca = fromPath[index];
+  }
+
+  return lca;
 }
 
 function buildMermaidGraph(edgeLabels) {
@@ -811,6 +831,9 @@ export default function HomePage() {
   const [pathTo, setPathTo] = useState("");
   const [pathResult, setPathResult] = useState([]);
   const [pathStatus, setPathStatus] = useState("");
+  const [lcaFrom, setLcaFrom] = useState("");
+  const [lcaTo, setLcaTo] = useState("");
+  const [lcaStatus, setLcaStatus] = useState("");
   const [selectedRoot, setSelectedRoot] = useState(null);
   const [playbackActive, setPlaybackActive] = useState(false);
   const [playbackStep, setPlaybackStep] = useState(-1);
@@ -836,6 +859,7 @@ export default function HomePage() {
   const hasRenderableTrees = renderableTrees.length > 0;
   const showHierarchyFallback = !response || !hasRenderableTrees;
   const analytics = response?.analytics || null;
+  const graphCentrality = analytics?.centrality || null;
   const componentDetails = analytics?.connected_components || [];
   const componentByRoot = useMemo(
     () => Object.fromEntries(componentDetails.map((detail) => [detail.root, detail])),
@@ -871,6 +895,12 @@ export default function HomePage() {
   }, [analytics, liveAnalysis]);
 
   const selectedComponent = selectedRoot ? componentByRoot[selectedRoot] : null;
+  const selectedTreeNodes =
+    selectedComponent?.type === "tree"
+      ? [...(selectedComponent.nodes || [])].sort()
+      : [];
+  const selectedTopBottlenecks = selectedComponent?.top_central_nodes || [];
+  const globalTopBottlenecks = graphCentrality?.bottlenecks?.slice(0, 5) || [];
   const playbackOrder =
     selectedComponent?.type === "tree"
       ? selectedComponent.traversal?.[traversalMode] || []
@@ -1003,6 +1033,9 @@ export default function HomePage() {
     setPlaybackStep(-1);
     setPathResult([]);
     setPathStatus("");
+    setLcaFrom("");
+    setLcaTo("");
+    setLcaStatus("");
   }, [renderableTrees, componentByRoot]);
 
   useEffect(() => {
@@ -1015,6 +1048,12 @@ export default function HomePage() {
     setPlaybackActive(false);
     setPlaybackStep(-1);
   }, [selectedRoot, traversalMode]);
+
+  useEffect(() => {
+    setLcaFrom("");
+    setLcaTo("");
+    setLcaStatus("");
+  }, [selectedRoot]);
 
   useEffect(() => {
     if (!playbackActive || playbackOrder.length === 0) {
@@ -1082,6 +1121,27 @@ export default function HomePage() {
     setPathStatus("");
     setPathFrom("");
     setPathTo("");
+  }
+
+  function handleFindLca() {
+    if (selectedComponent?.type !== "tree") {
+      setLcaStatus("LCA is available only for non-cyclic tree components.");
+      return;
+    }
+
+    if (!lcaFrom || !lcaTo) {
+      setLcaStatus("Choose both nodes to compute the LCA.");
+      return;
+    }
+
+    const ancestor = findLowestCommonAncestor(selectedComponent.lineage, lcaFrom, lcaTo);
+
+    if (!ancestor) {
+      setLcaStatus("No shared ancestor found in the selected component.");
+      return;
+    }
+
+    setLcaStatus(`Lowest common ancestor: ${ancestor} (${lcaFrom}, ${lcaTo})`);
   }
 
   function handleDownloadMermaid() {
@@ -1534,6 +1594,83 @@ export default function HomePage() {
                     </div>
                   </div>
 
+                  <div className="insight-row">
+                    <div className="insight-field">
+                      <label htmlFor="lca-from">LCA Node A</label>
+                      <select
+                        id="lca-from"
+                        className="control-select"
+                        value={lcaFrom}
+                        onChange={(event) => setLcaFrom(event.target.value)}
+                        disabled={selectedComponent?.type !== "tree"}
+                      >
+                        <option value="">Select</option>
+                        {selectedTreeNodes.map((node) => (
+                          <option key={`lca-from-${node}`} value={node}>{node}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="insight-field">
+                      <label htmlFor="lca-to">LCA Node B</label>
+                      <select
+                        id="lca-to"
+                        className="control-select"
+                        value={lcaTo}
+                        onChange={(event) => setLcaTo(event.target.value)}
+                        disabled={selectedComponent?.type !== "tree"}
+                      >
+                        <option value="">Select</option>
+                        {selectedTreeNodes.map((node) => (
+                          <option key={`lca-to-${node}`} value={node}>{node}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="insight-field insight-grow">
+                      <label>Analytics Actions</label>
+                      <div className="toolbar-actions">
+                        <button type="button" className="secondary-button" onClick={handleFindLca} disabled={selectedComponent?.type !== "tree"}>
+                          Find LCA
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="analytics-strip">
+                    <div className="analytics-box">
+                      <p className="analytics-box-title">Selected Bottlenecks</p>
+                      {selectedTopBottlenecks.length > 0 ? (
+                        <div className="analytics-list">
+                          {selectedTopBottlenecks.map((entry) => (
+                            <div className="analytics-item" key={`selected-bottleneck-${selectedRoot}-${entry.node}`}>
+                              <strong>{entry.node}</strong>
+                              <span>B {formatMetric(entry.betweenness)}</span>
+                              <span>C {formatMetric(entry.closeness)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="analytics-empty">No centrality data available.</p>
+                      )}
+                    </div>
+                    <div className="analytics-box">
+                      <p className="analytics-box-title">Global Bottlenecks</p>
+                      {globalTopBottlenecks.length > 0 ? (
+                        <div className="analytics-list">
+                          {globalTopBottlenecks.map((entry) => (
+                            <div className="analytics-item" key={`global-bottleneck-${entry.node}`}>
+                              <strong>{entry.node}</strong>
+                              <span>{entry.component_root || "—"}</span>
+                              <span>B {formatMetric(entry.betweenness)}</span>
+                              <span>C {formatMetric(entry.closeness)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="analytics-empty">No centrality data available.</p>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="insight-row insight-actions-row">
                     <div className="toolbar-actions">
                       <button type="button" className="secondary-button" onClick={handleFindPath} disabled={!response}>
@@ -1551,6 +1688,7 @@ export default function HomePage() {
                     </div>
                     <div className="insight-feedback">
                       {pathStatus && <span className="path-status">{pathStatus}</span>}
+                      {lcaStatus && <span className="path-status">{lcaStatus}</span>}
                       {searchContext?.root && (
                         <span className="path-status">
                           Lineage focus: {normalizedSearchNode} in root {searchContext.root}
