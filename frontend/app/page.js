@@ -44,12 +44,14 @@ C->D`,
 
 const DEFAULT_SAMPLE_NAME = "Official Sample";
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://bajaj-finance-full-stack-challenge.onrender.com";
+const API_ENDPOINT_DISPLAY =
+  process.env.NEXT_PUBLIC_API_ENDPOINT_DISPLAY || "https://bajaj-finance-full-stack-challenge.onrender.com/bfhl";
 const FRONTEND_URL =
-  process.env.NEXT_PUBLIC_FRONTEND_URL || "https://your-vercel-app.vercel.app";
+  process.env.NEXT_PUBLIC_FRONTEND_URL || "https://bajaj-finance-full-stack-challenge.vercel.app/";
 const GITHUB_REPO_URL =
-  process.env.NEXT_PUBLIC_GITHUB_REPO_URL || "https://github.com/your-username/your-repo";
-const INITIAL_STATUS = "Ready to analyze your graph.";
+  process.env.NEXT_PUBLIC_GITHUB_REPO_URL || "https://github.com/chethanakash67/Bajaj-Finance-Full-Stack-Challenge-Hierarchy-Processing-REST-API";
+const INITIAL_STATUS = "Awaiting graph input. Enter edges below.";
 const EDGE_PATTERN = /^([A-Z])\s*->\s*([A-Z])$/;
 const USER_PROFILE = {
   user_id: "G CHETHAN AKASH",
@@ -57,11 +59,24 @@ const USER_PROFILE = {
   college_roll_number: "RA2311028010059",
 };
 
-function parseEdges(rawText) {
-  if (rawText.trim().length === 0) {
-    return [];
-  }
+function formatDisplayName(name) {
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
+const NAV_ITEMS = [
+  { key: "dashboard",    label: "Dashboard",    targetId: "dashboard-section"    },
+  { key: "hidden-tests", label: "Hidden Tests",  targetId: "hidden-tests-section" },
+  { key: "validation",   label: "Validation",   targetId: "validation-section"   },
+  { key: "deployment",   label: "Deployment",   targetId: "deployment-section"   },
+];
+
+function parseEdges(rawText) {
+  if (rawText.trim().length === 0) return [];
   return rawText.split(/\n|,/).map((item) => item.trim());
 }
 
@@ -73,123 +88,106 @@ function analyzeInput(entries) {
   let validLookingCount = 0;
 
   for (const entry of entries) {
-    if (entry.length === 0) {
-      invalidEntries.push("(empty line)");
-      continue;
-    }
-
+    if (entry.length === 0) { invalidEntries.push("(empty line)"); continue; }
     const match = EDGE_PATTERN.exec(entry);
-
-    if (!match || match[1] === match[2]) {
-      invalidEntries.push(entry);
-      continue;
-    }
-
+    if (!match || match[1] === match[2]) { invalidEntries.push(entry); continue; }
     validLookingCount += 1;
-
     if (seenEdges.has(entry) && !duplicateSeen.has(entry)) {
       duplicateSeen.add(entry);
       duplicateEdges.push(entry);
       continue;
     }
-
     seenEdges.add(entry);
   }
 
-  return {
-    invalidEntries,
-    duplicateEdges,
-    validLookingCount,
-  };
+  return { invalidEntries, duplicateEdges, validLookingCount };
 }
 
-function formatJson(response) {
-  return JSON.stringify(response, null, 2);
-}
-
-function formatDisplayName(name) {
-  return name
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function syntaxHighlightJson(json) {
+  return json
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(
+      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+      (match) => {
+        let cls = "json-number";
+        if (/^"/.test(match)) {
+          cls = /:$/.test(match) ? "json-key" : "json-string";
+        } else if (/true|false/.test(match)) {
+          cls = "json-bool";
+        } else if (/null/.test(match)) {
+          cls = "json-null";
+        }
+        return `<span class="${cls}">${match}</span>`;
+      }
+    );
 }
 
 function TreeDiagramNode({ nodeName, subtree }) {
   const children = Object.entries(subtree);
-
   return (
-    <div className={`branch-node ${children.length > 0 ? "has-children" : ""}`}>
-      <div className="branch-badge">
-        <span className="branch-core" />
-        <span className="branch-label">{nodeName}</span>
+    <div className={`tree-diagram-node ${children.length > 0 ? "has-children" : ""}`}>
+      <div className="tree-badge">
+        <span className="tree-dot" />
+        <span className="tree-label">{nodeName}</span>
       </div>
-      {children.length > 0 ? (
-        <div className="branch-children">
+      {children.length > 0 && (
+        <div className="tree-diagram-children">
           {children.map(([childName, childTree]) => (
-            <div className="branch-child" key={childName}>
+            <div className="tree-diagram-child" key={childName}>
               <TreeDiagramNode nodeName={childName} subtree={childTree} />
             </div>
           ))}
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
 
 export default function HomePage() {
   const [selectedSample, setSelectedSample] = useState(DEFAULT_SAMPLE_NAME);
-  const [input, setInput] = useState(SAMPLE_SETS[DEFAULT_SAMPLE_NAME]);
-  const [status, setStatus] = useState(INITIAL_STATUS);
-  const [error, setError] = useState("");
-  const [response, setResponse] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [copyToast, setCopyToast] = useState("");
+  const [input, setInput]                   = useState(SAMPLE_SETS[DEFAULT_SAMPLE_NAME]);
+  const [status, setStatus]                 = useState(INITIAL_STATUS);
+  const [error, setError]                   = useState("");
+  const [response, setResponse]             = useState(null);
+  const [isLoading, setIsLoading]           = useState(false);
+  const [copyToast, setCopyToast]           = useState("");
+  const [activeNav, setActiveNav]           = useState("dashboard");
 
-  const parsedLines = parseEdges(input);
-  const liveAnalysis = analyzeInput(parsedLines);
+  const parsedLines    = parseEdges(input);
+  const liveAnalysis   = analyzeInput(parsedLines);
   const totalParsedLines = parsedLines.length;
-  const jsonBlock = response ? formatJson(response) : "Waiting for a response...";
+  const jsonString     = response ? JSON.stringify(response, null, 2) : null;
 
   async function handleSubmit(event) {
     event.preventDefault();
-
-    if (totalParsedLines === 0) {
-      setError("400: Please enter at least one edge before submitting.");
+    if (totalParsedLines === 0 || (totalParsedLines === 1 && parsedLines[0] === "")) {
+      setError("400 · Please enter at least one edge before submitting.");
       setStatus("No request sent.");
       setResponse(null);
       return;
     }
-
     setIsLoading(true);
     setError("");
     setCopyToast("");
-    setStatus("Processing request...");
-
+    setStatus("Dispatching request to API...");
     try {
       const apiResponse = await fetch(`${API_BASE_URL}/bfhl`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          data: parsedLines,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: parsedLines }),
       });
-
       const payload = await apiResponse.json();
-
       if (!apiResponse.ok) {
-        throw new Error(`${apiResponse.status}: ${payload.message || "API request failed."}`);
+        throw new Error(`${apiResponse.status} · ${payload.message || "API request failed."}`);
       }
-
       setResponse(payload);
-      setStatus("Analysis complete.");
+      setStatus("Response received successfully.");
     } catch (submitError) {
       setError(
         submitError.message === "Failed to fetch"
-          ? `Network error: Could not reach ${API_BASE_URL}. Make sure the backend server is running.`
+          ? `Network error · Could not reach ${API_ENDPOINT_DISPLAY}. Ensure the backend is running.`
           : submitError.message
       );
       setStatus("Unable to reach the backend API.");
@@ -200,23 +198,20 @@ export default function HomePage() {
   }
 
   async function handleCopyJson() {
-    if (!response) {
-      return;
-    }
-
-    await navigator.clipboard.writeText(jsonBlock);
-    setCopyToast("JSON copied to clipboard.");
-    window.setTimeout(() => setCopyToast(""), 1800);
+    if (!jsonString) return;
+    await navigator.clipboard.writeText(jsonString);
+    setCopyToast("Payload copied to clipboard ✓");
+    window.setTimeout(() => setCopyToast(""), 2000);
   }
 
   function handleSampleChange(event) {
-    const nextSample = event.target.value;
-    setSelectedSample(nextSample);
-    setInput(SAMPLE_SETS[nextSample] ?? input);
+    const next = event.target.value;
+    setSelectedSample(next);
+    setInput(SAMPLE_SETS[next] ?? input);
     setResponse(null);
     setError("");
     setCopyToast("");
-    setStatus(`${nextSample} loaded.`);
+    setStatus(`${next} loaded.`);
   }
 
   function handleClear() {
@@ -228,313 +223,449 @@ export default function HomePage() {
     setStatus(INITIAL_STATUS);
   }
 
+  function handleNavClick(item) {
+    setActiveNav(item.key);
+    const el = document.getElementById(item.targetId);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   const summaryCards = response
     ? [
-        ["Identity", formatDisplayName(response.user_id.replace(/_/g, " ")), "Submission owner"],
-        ["Trees", response.summary.total_trees, "Valid non-cyclic groups"],
-        ["Cycles", response.summary.total_cycles, "Cyclic components"],
-        ["Largest Root", response.summary.largest_tree_root ?? "N/A", "Greatest depth root"],
+        ["UID",     formatDisplayName(response.user_id.replace(/_/g, " ")), "Identity tag"],
+        ["Trees",   response.summary.total_trees,                           "Valid non-cyclic"],
+        ["Cycles",  response.summary.total_cycles,                          "Cyclic groups"],
+        ["Largest", response.summary.largest_tree_root ?? "N/A",            "Greatest depth root"],
       ]
     : [
-        ["Identity", formatDisplayName(USER_PROFILE.user_id), "Submission owner"],
-        ["Trees", 0, "Valid non-cyclic groups"],
-        ["Cycles", 0, "Cyclic components"],
-        ["Largest Root", "N/A", "Greatest depth root"],
+        ["UID",     formatDisplayName(USER_PROFILE.user_id), "Identity tag"],
+        ["Trees",   "—", "Valid non-cyclic"],
+        ["Cycles",  "—", "Cyclic groups"],
+        ["Largest", "—", "Greatest depth root"],
       ];
 
-  const displayedInvalidEntries = response ? response.invalid_entries : liveAnalysis.invalidEntries;
-  const displayedDuplicateEdges = response ? response.duplicate_edges : liveAnalysis.duplicateEdges;
+  const displayedInvalid    = response ? response.invalid_entries    : liveAnalysis.invalidEntries;
+  const displayedDuplicates = response ? response.duplicate_edges     : liveAnalysis.duplicateEdges;
 
   return (
-    <main className="studio-shell">
-      <section className="studio-hero">
-        <div className="hero-copy-block">
-          <p className="eyebrow">SRM Full Stack Engineering Challenge</p>
-          <h1>Graph Atlas</h1>
-          <p className="hero-text">
-            A bright, editorial-style graph workspace for validating edge inputs, mapping hierarchies,
-            isolating cyclic components, and reviewing the exact API response before submission.
-          </p>
+    <main className="dashboard-shell">
+      {/* ── SIDEBAR ─────────────────────────── */}
+      <aside className="sidebar">
+        <div>
+          <div className="brand-mark">
+            <span className="brand-text">BF</span>
+          </div>
+          <nav className="nav-list" style={{ marginTop: "1.25rem" }}>
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={`nav-item ${activeNav === item.key ? "active" : ""}`}
+                onClick={() => handleNavClick(item)}
+              >
+                <span className="nav-label">
+                  <span className="nav-dot" />
+                  {item.label}
+                </span>
+              </button>
+            ))}
+          </nav>
         </div>
 
-        <div className="hero-panel">
-          <div className="hero-kpis">
-            <div className="hero-kpi">
-              <span>Parsed Lines</span>
+        <div className="sidebar-stack" id="deployment-section">
+          <div className="sidebar-note">
+            <span className="sidebar-label">API Endpoint</span>
+            <p className="sidebar-value break-text" style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem" }}>
+              {API_ENDPOINT_DISPLAY}
+            </p>
+          </div>
+          <div className="sidebar-note">
+            <span className="sidebar-label">Frontend</span>
+            <p className="sidebar-value break-text" style={{ fontFamily: "var(--font-mono)", fontSize: "0.78rem" }}>
+              {FRONTEND_URL}
+            </p>
+          </div>
+          <div className="sidebar-note">
+            <span className="sidebar-label">GitHub</span>
+            <a className="sidebar-link" href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
+              {GITHUB_REPO_URL}
+            </a>
+          </div>
+          <div className="sidebar-note profile-note">
+            <span className="sidebar-label">Profile</span>
+            <p className="sidebar-value" style={{ marginTop: "0.35rem" }}>{USER_PROFILE.user_id}</p>
+            <span className="sidebar-caption">{USER_PROFILE.email_id}</span>
+            <span className="sidebar-caption">{USER_PROFILE.college_roll_number}</span>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── MAIN ────────────────────────────── */}
+      <section className="dashboard-main">
+
+        {/* Topbar */}
+        <header className="topbar">
+          <div className="topbar-url">
+            <span className="url-method">POST</span>
+            <span>{API_ENDPOINT_DISPLAY}</span>
+          </div>
+          <div className="topbar-status">
+            <span className="status-dot" />
+            Evaluator Ready
+          </div>
+        </header>
+
+        {/* Hero */}
+        <section className="hero-strip" id="dashboard-section">
+          <div className="hero-grid-bg" />
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <p className="eyebrow">SRM Full Stack Engineering Challenge</p>
+            <h1>Hierarchy<br />Intelligence</h1>
+            <p className="hero-copy">
+              Submit graph edges, preview validation in real-time, inspect
+              cycle-safe hierarchy trees, and copy the exact API payload for evaluation.
+            </p>
+          </div>
+          <div className="hero-stats" style={{ position: "relative", zIndex: 1 }}>
+            <div className="mini-stat">
+              <span className="mini-label">Parsed Lines</span>
               <strong>{totalParsedLines}</strong>
             </div>
-            <div className="hero-kpi">
-              <span>Status</span>
-              <strong>{isLoading ? "Running" : "Idle"}</strong>
+            <div className="mini-stat">
+              <span className="mini-label">Engine Status</span>
+              <strong style={{ fontSize: "1.2rem", color: isLoading ? "var(--yellow)" : "var(--green)" }}>
+                {isLoading ? "RUNNING" : "IDLE"}
+              </strong>
             </div>
           </div>
-          <div className="hero-links">
-            <span className="hero-link-tag">API {API_BASE_URL}</span>
-            <span className="hero-link-tag">Web {FRONTEND_URL}</span>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="layout-grid">
-        <article className="paper-card composer-card">
-          <div className="section-head">
-            <div>
-              <p className="section-kicker">Compose</p>
-              <h2>Edge Studio</h2>
-            </div>
-            <span className="sample-tag">{selectedSample}</span>
-          </div>
+        {/* Grid */}
+        <section className="dashboard-grid">
 
-          <form className="composer-form" onSubmit={handleSubmit}>
-            <div className="control-strip">
-              <label className="field-block">
-                <span>Hidden Test Samples</span>
-                <select
-                  className="studio-select"
-                  value={selectedSample}
-                  onChange={handleSampleChange}
-                >
-                  {Object.keys(SAMPLE_SETS).map((sampleName) => (
-                    <option key={sampleName} value={sampleName}>
-                      {sampleName}
-                    </option>
-                  ))}
-                  <option value="Custom">Custom</option>
-                </select>
-              </label>
-
-              <div className="explain-box">
-                <p className="explain-title">Validation Preview</p>
-                <p className="explain-copy">
-                  Spacing like <code>A -&gt; B</code> is normalized. Self-loops and malformed entries stay invalid.
-                </p>
+          {/* ── COMPOSE ─────────────────────── */}
+          <article className="panel compose-panel" id="hidden-tests-section">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">Input Console</p>
+                <h2>Edge Submission</h2>
               </div>
+              <span className="panel-pill">{selectedSample}</span>
             </div>
 
-            <label className="field-block">
-              <span>Enter one edge per line or comma-separated values</span>
-              <textarea
-                className="studio-input"
-                rows={12}
-                spellCheck="false"
-                value={input}
-                onChange={(event) => {
-                  setSelectedSample("Custom");
-                  setInput(event.target.value);
-                }}
-                placeholder="A->B&#10;A->C&#10;B->D"
-              />
-            </label>
-
-            <div className="preview-band">
-              <div className="preview-pill">
-                <span>Lines</span>
-                <strong>{totalParsedLines}</strong>
+            <form className="form-layout" onSubmit={handleSubmit}>
+              <div className="field-grid">
+                <div>
+                  <label htmlFor="hidden-sample-select">Test Dataset</label>
+                  <select
+                    id="hidden-sample-select"
+                    className="dashboard-select"
+                    value={selectedSample}
+                    onChange={handleSampleChange}
+                  >
+                    {Object.keys(SAMPLE_SETS).map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                    <option value="Custom">Custom</option>
+                  </select>
+                </div>
+                <div className="helper-box">
+                  <p className="helper-title">Depth Rule</p>
+                  <p className="helper-text">
+                    Depth = node count on the longest root-to-leaf path.
+                    <br />e.g. A→B→C = 3
+                  </p>
+                </div>
               </div>
-              <div className="preview-pill">
-                <span>Valid-looking</span>
-                <strong>{liveAnalysis.validLookingCount}</strong>
+
+              <div>
+                <label htmlFor="edge-input">Edges — one per line or comma-separated</label>
+                <textarea
+                  id="edge-input"
+                  rows={12}
+                  spellCheck="false"
+                  value={input}
+                  onChange={(e) => {
+                    setSelectedSample("Custom");
+                    setInput(e.target.value);
+                  }}
+                  placeholder={"A->B\nA->C\nB->D"}
+                  style={{ minHeight: "260px" }}
+                />
               </div>
-              <div className="preview-pill">
-                <span>Invalid-looking</span>
-                <strong>{liveAnalysis.invalidEntries.length}</strong>
+
+              <div className="preview-grid">
+                <div className="metric-chip">
+                  <span>Total Lines</span>
+                  <strong>{totalParsedLines}</strong>
+                </div>
+                <div className="metric-chip">
+                  <span>Valid-looking</span>
+                  <strong style={{ color: "var(--green)" }}>{liveAnalysis.validLookingCount}</strong>
+                </div>
+                <div className="metric-chip">
+                  <span>Invalid</span>
+                  <strong style={{ color: liveAnalysis.invalidEntries.length > 0 ? "var(--red)" : "var(--cyan)" }}>
+                    {liveAnalysis.invalidEntries.length}
+                  </strong>
+                </div>
               </div>
-            </div>
 
-            <div className="action-band">
-              <button type="submit" className="primary-cta" disabled={isLoading}>
-                {isLoading ? "Processing..." : "Analyze Graph"}
-              </button>
-              <button
-                type="button"
-                className="secondary-cta"
-                onClick={() => handleSampleChange({ target: { value: DEFAULT_SAMPLE_NAME } })}
-              >
-                Load Official Sample
-              </button>
-              <button type="button" className="ghost-cta" onClick={handleClear}>
-                Clear Canvas
-              </button>
-            </div>
-          </form>
-
-          <div className={`message-strip ${error ? "error" : "ok"}`}>
-            <p className="message-title">{error ? "API Error" : "System Status"}</p>
-            <p className="message-body">{error || status}</p>
-          </div>
-        </article>
-
-        <article className="paper-card summary-card-block">
-          <div className="section-head">
-            <div>
-              <p className="section-kicker">Overview</p>
-              <h2>Result Snapshot</h2>
-            </div>
-          </div>
-
-          <div className="mosaic-grid">
-            {summaryCards.map(([label, value, caption]) => (
-              <div className="mosaic-card" key={label}>
-                <p className="mosaic-label">{label}</p>
-                <p className={`mosaic-value ${String(value).length > 14 ? "small" : ""}`}>{value}</p>
-                <p className="mosaic-caption">{caption}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="rule-notes">
-            <p><strong>Invalid entries:</strong> anything outside single-uppercase <code>X-&gt;Y</code>, including self-loops.</p>
-            <p><strong>Duplicate edges:</strong> only repeated exact edges are listed, once.</p>
-            <p><strong>Cyclic components:</strong> any component with a loop returns <code>tree: {}</code> and <code>has_cycle: true</code>.</p>
-          </div>
-        </article>
-
-        <article className="paper-card ledger-card">
-          <div className="section-head">
-            <div>
-              <p className="section-kicker">Signals</p>
-              <h2>Validation Ledger</h2>
-            </div>
-          </div>
-
-          <div className="ledger-grid">
-            <div className="ledger-box">
-              <p className="ledger-title">Invalid Entries</p>
-              <p className="ledger-help">Trimmed before validation. Empty rows, malformed arrows, and self-loops show here.</p>
-              <div className="token-row">
-                {displayedInvalidEntries.length > 0 ? (
-                  displayedInvalidEntries.map((entry, index) => (
-                    <span className="token-chip token-red" key={`${entry}-${index}`}>
-                      {entry}
-                    </span>
-                  ))
-                ) : (
-                  <span className="empty-line">No invalid entries detected.</span>
-                )}
-              </div>
-            </div>
-
-            <div className="ledger-box">
-              <p className="ledger-title">Duplicate Edges</p>
-              <p className="ledger-help">Only repeated exact edges appear here, even if the same edge repeats many times.</p>
-              <div className="token-row">
-                {displayedDuplicateEdges.length > 0 ? (
-                  displayedDuplicateEdges.map((entry, index) => (
-                    <span className="token-chip token-amber" key={`${entry}-${index}`}>
-                      {entry}
-                    </span>
-                  ))
-                ) : (
-                  <span className="empty-line">No duplicate edges detected.</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article className="paper-card hierarchy-stage">
-          <div className="section-head">
-            <div>
-              <p className="section-kicker">Structures</p>
-              <h2>Hierarchy Gallery</h2>
-            </div>
-          </div>
-
-          <div className="gallery-stack">
-            {response ? (
-              response.hierarchies.map((hierarchy) => (
-                <div className="hierarchy-sheet" key={hierarchy.root}>
-                  <div className="hierarchy-header">
-                    <div>
-                      <p className="hierarchy-root">Root {hierarchy.root}</p>
-                      <p className="hierarchy-meta">
-                        {hierarchy.has_cycle
-                          ? "Cyclic component"
-                          : `Depth ${hierarchy.depth} • longest root-to-leaf path`}
-                      </p>
-                    </div>
-                    <span className={`status-chip ${hierarchy.has_cycle ? "cycle" : "tree"}`}>
-                      {hierarchy.has_cycle ? "Cycle detected" : `Depth ${hierarchy.depth}`}
-                    </span>
-                  </div>
-
-                  {hierarchy.has_cycle ? (
-                    <div className="cycle-banner">
-                      Tree rendering is intentionally disabled because this connected component contains a cycle.
-                    </div>
+              <div className="action-row">
+                <button type="submit" className="btn-primary" disabled={isLoading}>
+                  {isLoading ? (
+                    <span className="loading-btn"><span className="spin" /> Processing…</span>
                   ) : (
-                    <div className="tree-stage">
-                      <div className="tree-wrap">
-                        <TreeDiagramNode nodeName={hierarchy.root} subtree={hierarchy.tree} />
-                      </div>
-                    </div>
+                    "▶ Submit to API"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => handleSampleChange({ target: { value: DEFAULT_SAMPLE_NAME } })}
+                >
+                  Load Official Sample
+                </button>
+                <button type="button" className="ghost-button" onClick={handleClear}>
+                  Clear
+                </button>
+              </div>
+            </form>
+
+            <div className={`status-card ${error ? "error" : "success"}`}>
+              <span className="status-icon">{error ? "✕" : "●"}</span>
+              <div>
+                <p className="status-label">{error ? "API Error" : "System Status"}</p>
+                <p className="status-message">{error || status}</p>
+              </div>
+            </div>
+
+            <div className="chip-grid" style={{ marginTop: "0.9rem" }}>
+              <div className="metric-chip">
+                <span>Invalid Entries</span>
+                <strong style={{ color: displayedInvalid.length > 0 ? "var(--red)" : "var(--cyan)" }}>
+                  {displayedInvalid.length}
+                </strong>
+              </div>
+              <div className="metric-chip">
+                <span>Duplicate Edges</span>
+                <strong style={{ color: displayedDuplicates.length > 0 ? "var(--orange)" : "var(--cyan)" }}>
+                  {displayedDuplicates.length}
+                </strong>
+              </div>
+              <div className="metric-chip">
+                <span>Cycle Guard</span>
+                <strong style={{ color: "var(--green)", fontSize: "0.9rem" }}>ACTIVE</strong>
+              </div>
+            </div>
+          </article>
+
+          {/* ── SUMMARY ─────────────────────── */}
+          <article className="panel summary-panel">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">At a Glance</p>
+                <h2>Summary Board</h2>
+              </div>
+            </div>
+            <div className="summary-cards">
+              {summaryCards.map(([label, value, caption]) => (
+                <div className="summary-card" key={label}>
+                  <p className="summary-title">{label}</p>
+                  <p className={`value ${String(value).length > 12 ? "compact" : ""}`}>{value}</p>
+                  <p className="summary-caption">{caption}</p>
+                </div>
+              ))}
+            </div>
+            <div className="notes-list">
+              <p className="note-line">
+                <strong>Invalid entries</strong> — anything outside single-uppercase{" "}
+                <code>X-&gt;Y</code>, including self-loops.
+              </p>
+              <p className="note-line">
+                <strong>Duplicate edges</strong> — only repeated exact edges, listed once.
+              </p>
+              <p className="note-line">
+                <strong>Cyclic groups</strong> — any cycle returns <code>tree: {"{}"}</code> with{" "}
+                <code>has_cycle: true</code>.
+              </p>
+            </div>
+          </article>
+
+          {/* ── VALIDATION ──────────────────── */}
+          <article className="panel detail-panel" id="validation-section">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">Validation Feed</p>
+                <h2>Issues Detected</h2>
+              </div>
+            </div>
+
+            <div className="detail-columns">
+              <div className="detail-box">
+                <p className="detail-title">
+                  ✕ Invalid Entries{" "}
+                  {displayedInvalid.length > 0 && (
+                    <span style={{
+                      marginLeft: "0.5rem",
+                      background: "var(--red-soft)",
+                      color: "var(--red)",
+                      padding: "0.1rem 0.4rem",
+                      borderRadius: "6px",
+                      fontSize: "0.72rem",
+                      fontFamily: "var(--font-mono)",
+                    }}>{displayedInvalid.length}</span>
+                  )}
+                </p>
+                <p className="detail-explainer">
+                  Trimmed before validation. Empty lines, malformed arrows, and self-loops land here.
+                </p>
+                {displayedInvalid.length > 0 ? (
+                  <div className="token-list">
+                    {displayedInvalid.map((entry, i) => (
+                      <span className="token error-token" key={`${entry}-${i}`}>{entry}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="empty-state">No invalid entries detected.</p>
+                )}
+              </div>
+
+              <div className="detail-box">
+                <p className="detail-title">
+                  ⚠ Duplicate Edges{" "}
+                  {displayedDuplicates.length > 0 && (
+                    <span style={{
+                      marginLeft: "0.5rem",
+                      background: "var(--orange-soft)",
+                      color: "var(--orange)",
+                      padding: "0.1rem 0.4rem",
+                      borderRadius: "6px",
+                      fontSize: "0.72rem",
+                      fontFamily: "var(--font-mono)",
+                    }}>{displayedDuplicates.length}</span>
+                  )}
+                </p>
+                <p className="detail-explainer">
+                  Only repeated exact edges are listed — even if an edge appears many times.
+                </p>
+                {displayedDuplicates.length > 0 ? (
+                  <div className="token-list">
+                    {displayedDuplicates.map((entry, i) => (
+                      <span className="token warning-token" key={`${entry}-${i}`}>{entry}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="empty-state">No duplicate edges detected.</p>
+                )}
+              </div>
+            </div>
+          </article>
+
+          {/* ── HIERARCHY ───────────────────── */}
+          <article className="panel hierarchy-panel">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">Structured Insights</p>
+                <h2>Hierarchy Trees</h2>
+              </div>
+              {response && (
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <span style={{
+                    background: "var(--green-soft)",
+                    color: "var(--green)",
+                    border: "1px solid rgba(0,255,136,0.2)",
+                    borderRadius: "8px",
+                    padding: "0.4rem 0.75rem",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.78rem",
+                  }}>
+                    {response.summary.total_trees} tree{response.summary.total_trees !== 1 ? "s" : ""}
+                  </span>
+                  {response.summary.total_cycles > 0 && (
+                    <span style={{
+                      background: "var(--red-soft)",
+                      color: "var(--red)",
+                      border: "1px solid rgba(255,58,92,0.2)",
+                      borderRadius: "8px",
+                      padding: "0.4rem 0.75rem",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "0.78rem",
+                    }}>
+                      {response.summary.total_cycles} cycle{response.summary.total_cycles !== 1 ? "s" : ""}
+                    </span>
                   )}
                 </div>
-              ))
-            ) : (
-              <div className="empty-gallery">
-                Submit a payload to render hierarchy sheets for each connected component.
+              )}
+            </div>
+
+            <div className="hierarchy-list">
+              {response ? (
+                response.hierarchies.map((h) => (
+                  <div className="hierarchy-card" key={h.root}>
+                    <div className="hierarchy-topline">
+                      <div>
+                        <p className="hierarchy-title">Root: {h.root}</p>
+                        <p className="hierarchy-subtitle">
+                          {h.has_cycle
+                            ? "This component contains a cycle."
+                            : `Longest path: ${h.depth} node${h.depth !== 1 ? "s" : ""}`}
+                        </p>
+                      </div>
+                      <span className={`badge ${h.has_cycle ? "cycle" : ""}`}>
+                        {h.has_cycle ? "⟳ Cycle" : `Depth ${h.depth}`}
+                      </span>
+                    </div>
+                    {h.has_cycle ? (
+                      <div className="cycle-card">
+                        Tree preview disabled — cyclic component detected.
+                      </div>
+                    ) : (
+                      <div className="tree-view">
+                        <div className="tree-canvas">
+                          <TreeDiagramNode nodeName={h.root} subtree={h.tree} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="empty-state" style={{ padding: "1.5rem 0" }}>
+                  Submit a payload to render hierarchy cards for each connected component.
+                </p>
+              )}
+            </div>
+          </article>
+
+          {/* ── JSON ────────────────────────── */}
+          <article className="panel json-panel">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">Raw Payload</p>
+                <h2>JSON Response</h2>
               </div>
-            )}
-          </div>
-        </article>
+              <div className="json-header-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleCopyJson}
+                  disabled={!response}
+                >
+                  Copy JSON
+                </button>
+              </div>
+            </div>
+            {copyToast && <p className="copy-toast">✓ {copyToast}</p>}
+            <pre
+              className="json-output"
+              dangerouslySetInnerHTML={{
+                __html: jsonString
+                  ? syntaxHighlightJson(JSON.stringify(response, null, 2))
+                  : '<span style="color:var(--muted);font-style:italic">// Waiting for API response…\n// Submit edges above to see the full JSON payload.</span>',
+              }}
+            />
+          </article>
 
-        <article className="paper-card identity-card">
-          <div className="section-head">
-            <div>
-              <p className="section-kicker">Submission</p>
-              <h2>Identity & Links</h2>
-            </div>
-          </div>
-
-          <div className="identity-grid">
-            <div className="identity-box">
-              <span>Name</span>
-              <strong>{formatDisplayName(USER_PROFILE.user_id)}</strong>
-            </div>
-            <div className="identity-box">
-              <span>Email</span>
-              <strong>{USER_PROFILE.email_id}</strong>
-            </div>
-            <div className="identity-box">
-              <span>Roll Number</span>
-              <strong>{USER_PROFILE.college_roll_number}</strong>
-            </div>
-            <div className="identity-box">
-              <span>Hosted API</span>
-              <strong>{API_BASE_URL}</strong>
-            </div>
-            <div className="identity-box">
-              <span>Hosted Frontend</span>
-              <strong>{FRONTEND_URL}</strong>
-            </div>
-            <div className="identity-box">
-              <span>GitHub Repo</span>
-              <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
-                {GITHUB_REPO_URL}
-              </a>
-            </div>
-          </div>
-        </article>
-
-        <article className="paper-card json-card">
-          <div className="section-head">
-            <div>
-              <p className="section-kicker">Receipt</p>
-              <h2>Raw JSON</h2>
-            </div>
-            <button
-              type="button"
-              className="secondary-cta"
-              onClick={handleCopyJson}
-              disabled={!response}
-            >
-              Copy JSON
-            </button>
-          </div>
-          {copyToast ? <p className="copy-note">{copyToast}</p> : null}
-          <pre className="json-panel">{jsonBlock}</pre>
-        </article>
+        </section>
       </section>
     </main>
   );
