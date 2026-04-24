@@ -23,23 +23,6 @@ const USER_PROFILE = {
   college_roll_number: "RA2311028010059",
 };
 
-const SAMPLE_DATA = `A->B
-A->C
-B->D
-C->E
-E->F
-X->Y
-Y->Z
-Z->X
-P->Q
-Q->R
-G->H
-G->H
-G->I
-hello
-1->2
-A->`;
-
 /* ═══════════════════════════════════════════════════════════
    UTILITY FUNCTIONS
    ═══════════════════════════════════════════════════════════ */
@@ -108,114 +91,404 @@ function classifyLine(line, seenEdges) {
   return "valid";
 }
 
-/* Extract exact cycle path from adjacency */
-function extractCyclePath(edges) {
-  const adj = new Map();
+function buildAcceptedGraph(edgeLabels) {
+  const adjacency = new Map();
   const nodes = new Set();
-  for (const e of edges) {
-    const m = EDGE_PATTERN.exec(e.trim());
-    if (!m || m[1] === m[2]) continue;
-    nodes.add(m[1]);
-    nodes.add(m[2]);
-    if (!adj.has(m[1])) adj.set(m[1], []);
-    adj.get(m[1]).push(m[2]);
+  const edges = [];
+
+  for (const label of edgeLabels || []) {
+    const match = EDGE_PATTERN.exec(label);
+    if (!match) continue;
+
+    const [, from, to] = match;
+    nodes.add(from);
+    nodes.add(to);
+    if (!adjacency.has(from)) adjacency.set(from, []);
+    if (!adjacency.has(to)) adjacency.set(to, []);
+    adjacency.get(from).push(to);
+    edges.push({ from, to, label: `${from}->${to}` });
   }
-  const visited = new Set(), inStack = new Set(), path = [];
-  let cyclePath = null;
-  function dfs(node) {
-    if (cyclePath) return;
-    visited.add(node);
-    inStack.add(node);
-    path.push(node);
-    for (const child of (adj.get(node) || [])) {
-      if (cyclePath) return;
-      if (inStack.has(child)) {
-        const idx = path.indexOf(child);
-        cyclePath = [...path.slice(idx), child];
-        return;
-      }
-      if (!visited.has(child)) dfs(child);
-    }
-    path.pop();
-    inStack.delete(node);
+
+  for (const [node, children] of adjacency.entries()) {
+    children.sort();
+    adjacency.set(node, children);
   }
-  for (const n of [...nodes].sort()) {
-    if (!visited.has(n) && !cyclePath) dfs(n);
-  }
-  return cyclePath;
+
+  return { nodes: [...nodes].sort(), adjacency, edges };
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SVG TREE — Fixed Canvas, Manual Zoom
-   ═══════════════════════════════════════════════════════════ */
-const NODE_W = 44, NODE_H = 32, H_GAP = 14, V_GAP = 44;
-
-function layoutTree(root, subtree) {
-  const nodes = [], edges = [];
-  let xCounter = 0;
-  function computeLayout(name, sub, depth) {
-    const children = Object.entries(sub);
-    if (children.length === 0) {
-      const x = xCounter * (NODE_W + H_GAP);
-      xCounter++;
-      const node = { name, x, y: depth * (NODE_H + V_GAP), depth, childCount: 0 };
-      nodes.push(node);
-      return node;
-    }
-    const childNodes = children.map(([cn, cs]) => computeLayout(cn, cs, depth + 1));
-    const x = (Math.min(...childNodes.map(n => n.x)) + Math.max(...childNodes.map(n => n.x))) / 2;
-    const node = { name, x, y: depth * (NODE_H + V_GAP), depth, childCount: childNodes.length };
-    nodes.push(node);
-    childNodes.forEach(child => edges.push({ from: node, to: child }));
-    return node;
+function findShortestPath(adjacency, from, to) {
+  if (!from || !to || !adjacency.has(from) || !adjacency.has(to)) {
+    return [];
   }
-  computeLayout(root, subtree, 0);
+
+  const queue = [[from]];
+  const visited = new Set([from]);
+
+  while (queue.length > 0) {
+    const path = queue.shift();
+    const current = path[path.length - 1];
+
+    if (current === to) {
+      return path;
+    }
+
+    for (const next of adjacency.get(current) || []) {
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push([...path, next]);
+      }
+    }
+  }
+
+  return [];
+}
+
+function buildMermaidGraph(edgeLabels) {
+  const lines = ["graph TD"];
+  for (const edge of edgeLabels || []) {
+    const match = EDGE_PATTERN.exec(edge);
+    if (!match) continue;
+    lines.push(`  ${match[1]} --> ${match[2]}`);
+  }
+  return lines.join("\n");
+}
+
+function flattenTree(root, subtree) {
+  const nodes = [];
+  const edges = [];
+
+  function walk(name, branch, depth, parent = null) {
+    const children = Object.entries(branch);
+    nodes.push({ name, depth, parent, childCount: children.length });
+
+    for (const [childName, childBranch] of children) {
+      edges.push({ from: name, to: childName, label: `${name}->${childName}` });
+      walk(childName, childBranch, depth + 1, name);
+    }
+  }
+
+  walk(root, subtree, 0);
   return { nodes, edges };
 }
 
-function SVGTree({ root, subtree, hasCycle, cyclePath }) {
+/* ═══════════════════════════════════════════════════════════
+   SVG TREE — Multi-View Graph Canvas
+   ═══════════════════════════════════════════════════════════ */
+const NODE_W = 44;
+const NODE_H = 32;
+const H_GAP = 14;
+const V_GAP = 44;
+const FORCE_ITERATIONS = 140;
+
+function countLeaves(subtree) {
+  const children = Object.values(subtree);
+  if (children.length === 0) return 1;
+  return children.reduce((sum, child) => sum + countLeaves(child), 0);
+}
+
+function layoutVertical(root, subtree) {
+  const nodes = [];
+  const edges = [];
+  let xCounter = 0;
+
+  function walk(name, branch, depth, parent = null) {
+    const children = Object.entries(branch);
+
+    if (children.length === 0) {
+      const node = {
+        name,
+        x: xCounter * (NODE_W + H_GAP),
+        y: depth * (NODE_H + V_GAP),
+        depth,
+        childCount: 0,
+        parent,
+      };
+      xCounter += 1;
+      nodes.push(node);
+      return node;
+    }
+
+    const childNodes = children.map(([childName, childBranch]) => walk(childName, childBranch, depth + 1, name));
+    const node = {
+      name,
+      x: (Math.min(...childNodes.map((child) => child.x)) + Math.max(...childNodes.map((child) => child.x))) / 2,
+      y: depth * (NODE_H + V_GAP),
+      depth,
+      childCount: childNodes.length,
+      parent,
+    };
+    nodes.push(node);
+
+    for (const child of childNodes) {
+      edges.push({ from: name, to: child.name, label: `${name}->${child.name}` });
+    }
+
+    return node;
+  }
+
+  walk(root, subtree, 0);
+  return { nodes, edges };
+}
+
+function layoutRadial(root, subtree) {
+  const nodes = [];
+  const edges = [];
+  const maxDepthRef = { value: 0 };
+
+  function walk(name, branch, depth, startAngle, endAngle, parent = null) {
+    const angle = (startAngle + endAngle) / 2;
+    maxDepthRef.value = Math.max(maxDepthRef.value, depth);
+    const radius = depth === 0 ? 0 : depth * 88;
+    nodes.push({
+      name,
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      depth,
+      childCount: Object.keys(branch).length,
+      parent,
+    });
+
+    const children = Object.entries(branch);
+    if (children.length === 0) return;
+
+    const totalLeaves = children.reduce((sum, [, childBranch]) => sum + countLeaves(childBranch), 0);
+    let currentAngle = startAngle;
+
+    for (const [childName, childBranch] of children) {
+      const childLeaves = countLeaves(childBranch);
+      const sweep = (childLeaves / totalLeaves) * (endAngle - startAngle);
+      const nextAngle = currentAngle + sweep;
+      edges.push({ from: name, to: childName, label: `${name}->${childName}` });
+      walk(childName, childBranch, depth + 1, currentAngle, nextAngle, name);
+      currentAngle = nextAngle;
+    }
+  }
+
+  walk(root, subtree, 0, -Math.PI / 2, Math.PI * 1.5);
+  const radiusShift = Math.max(1, maxDepthRef.value) * 88 + 64;
+
+  return {
+    nodes: nodes.map((node) => ({ ...node, x: node.x + radiusShift, y: node.y + radiusShift })),
+    edges,
+  };
+}
+
+function layoutForce(root, subtree) {
+  const flat = flattenTree(root, subtree);
+  const nodeNames = flat.nodes.map((node) => node.name);
+  const positions = new Map();
+  const velocities = new Map();
+  const size = Math.max(260, flat.nodes.length * 34);
+  const center = size / 2;
+
+  flat.nodes.forEach((node, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(flat.nodes.length, 1);
+    const radius = node.depth === 0 ? 0 : 40 + node.depth * 38;
+    positions.set(node.name, {
+      x: center + Math.cos(angle) * radius,
+      y: center + Math.sin(angle) * radius,
+    });
+    velocities.set(node.name, { x: 0, y: 0 });
+  });
+
+  for (let iteration = 0; iteration < FORCE_ITERATIONS; iteration += 1) {
+    for (const name of nodeNames) {
+      const force = { x: 0, y: 0 };
+      const position = positions.get(name);
+
+      for (const other of nodeNames) {
+        if (name === other) continue;
+        const otherPosition = positions.get(other);
+        const dx = position.x - otherPosition.x;
+        const dy = position.y - otherPosition.y;
+        const distance = Math.max(28, Math.hypot(dx, dy));
+        const repulsion = 900 / (distance * distance);
+        force.x += (dx / distance) * repulsion;
+        force.y += (dy / distance) * repulsion;
+      }
+
+      for (const edge of flat.edges) {
+        if (edge.from !== name && edge.to !== name) continue;
+        const otherName = edge.from === name ? edge.to : edge.from;
+        const otherPosition = positions.get(otherName);
+        const dx = otherPosition.x - position.x;
+        const dy = otherPosition.y - position.y;
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        const attraction = (distance - 90) * 0.015;
+        force.x += (dx / distance) * attraction;
+        force.y += (dy / distance) * attraction;
+      }
+
+      if (name === root) {
+        force.x += (center - position.x) * 0.08;
+        force.y += (center - position.y) * 0.08;
+      }
+
+      const velocity = velocities.get(name);
+      velocity.x = (velocity.x + force.x) * 0.84;
+      velocity.y = (velocity.y + force.y) * 0.84;
+    }
+
+    for (const name of nodeNames) {
+      const position = positions.get(name);
+      const velocity = velocities.get(name);
+      position.x += velocity.x;
+      position.y += velocity.y;
+    }
+  }
+
+  return {
+    nodes: flat.nodes.map((node) => ({
+      ...node,
+      x: positions.get(node.name).x,
+      y: positions.get(node.name).y,
+    })),
+    edges: flat.edges,
+  };
+}
+
+function buildLayout(root, subtree, viewMode) {
+  switch (viewMode) {
+    case "radial":
+      return layoutRadial(root, subtree);
+    case "force":
+      return layoutForce(root, subtree);
+    default:
+      return layoutVertical(root, subtree);
+  }
+}
+
+function serializeSvgToPng(svgElement, fileName) {
+  const serializer = new XMLSerializer();
+  const source = serializer.serializeToString(svgElement);
+  const svgBlob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(svgBlob);
+  const image = new Image();
+
+  image.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = svgElement.viewBox?.baseVal?.width || svgElement.width.baseVal.value || 1200;
+    canvas.height = svgElement.viewBox?.baseVal?.height || svgElement.height.baseVal.value || 800;
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#0d0d12";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0);
+    URL.revokeObjectURL(url);
+    const download = document.createElement("a");
+    download.href = canvas.toDataURL("image/png");
+    download.download = fileName;
+    download.click();
+  };
+
+  image.src = url;
+}
+
+function SVGTree({
+  root,
+  subtree,
+  hasCycle,
+  cyclePath,
+  breakingLink,
+  viewMode,
+  playbackNodes,
+  highlightNodes,
+  highlightEdges,
+  registerSvgRef,
+}) {
   const wrapperRef = useRef(null);
+  const svgRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
-  const [dragging, setDragging] = useState(false);
+  const [draggingCanvas, setDraggingCanvas] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [inspectedNode, setInspectedNode] = useState(null);
+  const [draggingNode, setDraggingNode] = useState(null);
+  const [nodeOffsets, setNodeOffsets] = useState({});
 
   const layout = useMemo(() => {
     if (hasCycle) return { nodes: [], edges: [] };
-    return layoutTree(root, subtree);
-  }, [root, subtree, hasCycle]);
+    return buildLayout(root, subtree, viewMode);
+  }, [root, subtree, hasCycle, viewMode]);
 
   useEffect(() => {
     setTransform({ x: 0, y: 0, scale: 1 });
     setInspectedNode(null);
-  }, [root, subtree]);
+    setDraggingNode(null);
+    setNodeOffsets({});
+  }, [root, subtree, viewMode]);
+
+  useEffect(() => {
+    if (typeof registerSvgRef === "function") {
+      registerSvgRef(root, svgRef.current);
+    }
+  }, [registerSvgRef, root, layout]);
 
   const PAD = 30;
-  const treeW = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.x)) + NODE_W + PAD * 2 : 200;
-  const treeH = layout.nodes.length > 0 ? Math.max(...layout.nodes.map(n => n.y)) + NODE_H + PAD * 2 : 100;
+  const renderedNodes = layout.nodes.map((node) => {
+    const offset = nodeOffsets[node.name] || { x: 0, y: 0 };
+    return {
+      ...node,
+      x: node.x + offset.x,
+      y: node.y + offset.y,
+    };
+  });
+  const nodePositions = new Map(renderedNodes.map((node) => [node.name, node]));
+  const minX = renderedNodes.length > 0 ? Math.min(...renderedNodes.map((node) => node.x)) : 0;
+  const maxX = renderedNodes.length > 0 ? Math.max(...renderedNodes.map((node) => node.x)) : 200;
+  const minY = renderedNodes.length > 0 ? Math.min(...renderedNodes.map((node) => node.y)) : 0;
+  const maxY = renderedNodes.length > 0 ? Math.max(...renderedNodes.map((node) => node.y)) : 120;
+  const canvasW = Math.max(maxX - minX + NODE_W + PAD * 2, 300);
+  const canvasH = Math.max(maxY - minY + NODE_H + PAD * 2, 120);
+  const translateX = PAD - minX;
+  const translateY = PAD - minY;
 
-  function onMouseDown(e) {
-    if (e.target.closest(".svg-node-group")) return;
-    setDragging(true);
-    setDragStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
+  function onMouseDown(event) {
+    if (event.target.closest(".svg-node-group")) return;
+    setDraggingCanvas(true);
+    setDragStart({ x: event.clientX - transform.x, y: event.clientY - transform.y });
   }
-  function onMouseMove(e) {
-    if (!dragging) return;
-    setTransform(prev => ({ ...prev, x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }));
+
+  function onMouseMove(event) {
+    if (draggingNode) {
+      const dx = (event.clientX - draggingNode.startX) / transform.scale;
+      const dy = (event.clientY - draggingNode.startY) / transform.scale;
+      setNodeOffsets((prev) => ({
+        ...prev,
+        [draggingNode.name]: {
+          x: draggingNode.origin.x + dx,
+          y: draggingNode.origin.y + dy,
+        },
+      }));
+      return;
+    }
+
+    if (!draggingCanvas) return;
+    setTransform((prev) => ({ ...prev, x: event.clientX - dragStart.x, y: event.clientY - dragStart.y }));
   }
-  function onMouseUp() { setDragging(false); }
+
+  function onMouseUp() {
+    setDraggingCanvas(false);
+    setDraggingNode(null);
+  }
 
   function getPathFromRoot(nodeName) {
     const path = [];
-    function search(name, sub, trail) {
+
+    function search(name, branch, trail) {
       trail.push(name);
-      if (name === nodeName) { path.push(...trail); return true; }
-      for (const [child, childSub] of Object.entries(sub)) {
-        if (search(child, childSub, trail)) return true;
+      if (name === nodeName) {
+        path.push(...trail);
+        return true;
       }
+
+      for (const [childName, childBranch] of Object.entries(branch)) {
+        if (search(childName, childBranch, trail)) return true;
+      }
+
       trail.pop();
       return false;
     }
+
     search(root, subtree, []);
     return path;
   }
@@ -228,13 +501,18 @@ function SVGTree({ root, subtree, hasCycle, cyclePath }) {
           <p className="cycle-title">Cyclic Component Detected</p>
           {cyclePath && cyclePath.length > 0 && (
             <div className="cycle-path-chain">
-              {cyclePath.map((node, i) => (
-                <span key={`${node}-${i}`}>
-                  <span className={`cycle-path-node ${i === cyclePath.length - 1 ? "cycle-end" : ""}`}>{node}</span>
-                  {i < cyclePath.length - 1 && <span className="cycle-arrow">→</span>}
+              {cyclePath.map((node, index) => (
+                <span key={`${node}-${index}`}>
+                  <span className={`cycle-path-node ${index === cyclePath.length - 1 ? "cycle-end" : ""}`}>{node}</span>
+                  {index < cyclePath.length - 1 && <span className="cycle-arrow">→</span>}
                 </span>
               ))}
             </div>
+          )}
+          {breakingLink && (
+            <p className="cycle-break-hint">
+              Suggested breaking link: <strong>{breakingLink}</strong>
+            </p>
           )}
           <p className="cycle-subtitle">Tree view disabled for this component</p>
         </div>
@@ -242,46 +520,106 @@ function SVGTree({ root, subtree, hasCycle, cyclePath }) {
     );
   }
 
-  const canvasW = Math.max(treeW, 300);
-  const canvasH = Math.max(treeH, 120);
-
   return (
     <div className="svg-tree-wrapper" ref={wrapperRef}>
+      <div className="svg-tree-controls">
+        <button type="button" onClick={() => setTransform((prev) => ({ ...prev, scale: Math.min(3, prev.scale * 1.25) }))}>+</button>
+        <button type="button" onClick={() => setTransform((prev) => ({ ...prev, scale: Math.max(0.3, prev.scale * 0.8) }))}>−</button>
+        <button type="button" onClick={() => setTransform({ x: 0, y: 0, scale: 1 })}>⟲</button>
+        <button type="button" onClick={() => svgRef.current && serializeSvgToPng(svgRef.current, `${root}-${viewMode}.png`)}>⇩</button>
+      </div>
       <svg
+        ref={svgRef}
         className="svg-tree"
         width={canvasW}
         height={canvasH}
+        viewBox={`0 0 ${canvasW} ${canvasH}`}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        style={{ cursor: dragging ? "grabbing" : "grab" }}
+        style={{ cursor: draggingNode ? "grabbing" : draggingCanvas ? "grabbing" : "grab" }}
       >
-        <g transform={`translate(${transform.x + PAD}, ${transform.y + PAD}) scale(${transform.scale})`}>
-          {layout.edges.map((edge, i) => {
-            const x1 = edge.from.x + NODE_W / 2;
-            const y1 = edge.from.y + NODE_H;
-            const x2 = edge.to.x + NODE_W / 2;
-            const y2 = edge.to.y;
-            const midY = (y1 + y2) / 2;
+        <g transform={`translate(${transform.x + translateX}, ${transform.y + translateY}) scale(${transform.scale})`}>
+          {layout.edges.map((edge, index) => {
+            const fromNode = nodePositions.get(edge.from);
+            const toNode = nodePositions.get(edge.to);
+            if (!fromNode || !toNode) return null;
+
+            const x1 = fromNode.x + NODE_W / 2;
+            const y1 = fromNode.y + NODE_H / 2;
+            const x2 = toNode.x + NODE_W / 2;
+            const y2 = toNode.y + NODE_H / 2;
+            const isHighlightedEdge = highlightEdges?.has(edge.label);
+
+            if (viewMode === "vertical") {
+              const midY = (y1 + y2) / 2;
+              return (
+                <path
+                  key={`edge-${edge.label}-${index}`}
+                  d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
+                  className={`svg-edge ${isHighlightedEdge ? "highlighted" : ""}`}
+                />
+              );
+            }
+
             return (
-              <path key={`e-${i}`} d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`} className="svg-edge" />
+              <line
+                key={`edge-${edge.label}-${index}`}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                className={`svg-edge ${isHighlightedEdge ? "highlighted" : ""}`}
+              />
             );
           })}
-          {layout.nodes.map((node, i) => (
-            <g
-              key={`n-${node.name}-${i}`}
-              className="svg-node-group"
-              transform={`translate(${node.x}, ${node.y})`}
-              onClick={() => setInspectedNode(inspectedNode === node.name ? null : node.name)}
-            >
-              <rect width={NODE_W} height={NODE_H} rx="6" ry="6"
-                className={`svg-node-rect ${inspectedNode === node.name ? "inspected" : ""} ${node.name === root ? "root-node" : ""}`} />
-              <text x={NODE_W / 2} y={NODE_H / 2} className="svg-node-label" dominantBaseline="central" textAnchor="middle">
-                {node.name}
-              </text>
-            </g>
-          ))}
+          {renderedNodes.map((node, index) => {
+            const isSelected = inspectedNode === node.name;
+            const isPlayback = playbackNodes?.has(node.name);
+            const isHighlightedNode = highlightNodes?.has(node.name);
+
+            return (
+              <g
+                key={`node-${node.name}-${index}`}
+                className="svg-node-group"
+                transform={`translate(${node.x}, ${node.y})`}
+                onMouseDown={(event) => {
+                  event.stopPropagation();
+                  setDraggingNode({
+                    name: node.name,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    origin: nodeOffsets[node.name] || { x: 0, y: 0 },
+                  });
+                }}
+                onClick={() => setInspectedNode(inspectedNode === node.name ? null : node.name)}
+              >
+                <rect
+                  width={NODE_W}
+                  height={NODE_H}
+                  rx="6"
+                  ry="6"
+                  className={[
+                    "svg-node-rect",
+                    isSelected ? "inspected" : "",
+                    node.name === root ? "root-node" : "",
+                    isPlayback ? "playback-node" : "",
+                    isHighlightedNode ? "highlighted-node" : "",
+                  ].filter(Boolean).join(" ")}
+                />
+                <text
+                  x={NODE_W / 2}
+                  y={NODE_H / 2}
+                  className="svg-node-label"
+                  dominantBaseline="central"
+                  textAnchor="middle"
+                >
+                  {node.name}
+                </text>
+              </g>
+            );
+          })}
         </g>
       </svg>
       {inspectedNode && (
@@ -291,23 +629,18 @@ function SVGTree({ root, subtree, hasCycle, cyclePath }) {
             <button className="node-tooltip-close" onClick={() => setInspectedNode(null)}>✕</button>
           </div>
           {(() => {
-            const n = layout.nodes.find(nd => nd.name === inspectedNode);
+            const node = renderedNodes.find((item) => item.name === inspectedNode);
             const pathFromRoot = getPathFromRoot(inspectedNode);
             return (
               <>
-                <div className="node-tooltip-row"><span>Depth</span><strong>{n?.depth ?? 0}</strong></div>
-                <div className="node-tooltip-row"><span>Children</span><strong>{n?.childCount ?? 0}</strong></div>
+                <div className="node-tooltip-row"><span>Depth</span><strong>{node?.depth ?? 0}</strong></div>
+                <div className="node-tooltip-row"><span>Children</span><strong>{node?.childCount ?? 0}</strong></div>
                 <div className="node-tooltip-row"><span>Path</span><strong className="node-tooltip-path">{pathFromRoot.join(" → ")}</strong></div>
               </>
             );
           })()}
         </div>
       )}
-      <div className="svg-tree-controls">
-        <button type="button" onClick={() => setTransform(p => ({ ...p, scale: Math.min(3, p.scale * 1.3) }))}>+</button>
-        <button type="button" onClick={() => setTransform(p => ({ ...p, scale: Math.max(0.3, p.scale * 0.7) }))}>−</button>
-        <button type="button" onClick={() => setTransform({ x: 0, y: 0, scale: 1 })}>⟲</button>
-      </div>
     </div>
   );
 }
@@ -442,11 +775,20 @@ export default function HomePage() {
   const [copyToast, setCopyToast] = useState("");
   const [activeNav, setActiveNav] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [autoSubmit, setAutoSubmit] = useState(false);
   const [theme, setTheme] = useState("dark");
-  const [treeMode, setTreeMode] = useState("dfs");
+  const [viewMode, setViewMode] = useState("vertical");
+  const [traversalMode, setTraversalMode] = useState("dfs");
   const [requestTime, setRequestTime] = useState(null);
+  const [searchNode, setSearchNode] = useState("");
+  const [pathFrom, setPathFrom] = useState("");
+  const [pathTo, setPathTo] = useState("");
+  const [pathResult, setPathResult] = useState([]);
+  const [pathStatus, setPathStatus] = useState("");
+  const [selectedRoot, setSelectedRoot] = useState(null);
+  const [playbackActive, setPlaybackActive] = useState(false);
+  const [playbackStep, setPlaybackStep] = useState(-1);
   const textareaRef = useRef(null);
+  const treeSvgRefs = useRef({});
 
   // Theme persistence
   useEffect(() => {
@@ -466,31 +808,76 @@ export default function HomePage() {
   const renderableTrees = response ? response.hierarchies.filter((h) => !h.has_cycle) : [];
   const hasRenderableTrees = renderableTrees.length > 0;
   const showHierarchyFallback = !response || !hasRenderableTrees;
+  const analytics = response?.analytics || null;
+  const componentDetails = analytics?.connected_components || [];
+  const componentByRoot = useMemo(
+    () => Object.fromEntries(componentDetails.map((detail) => [detail.root, detail])),
+    [componentDetails]
+  );
+  const acceptedGraph = useMemo(
+    () => buildAcceptedGraph(analytics?.accepted_edges || []),
+    [analytics]
+  );
+  const allGraphNodes = acceptedGraph.nodes;
+  const cyclePaths = useMemo(
+    () => Object.fromEntries((analytics?.cycle_components || []).map((cycle) => [cycle.root, cycle.cycle_path || []])),
+    [analytics]
+  );
+  const breakingLinks = useMemo(
+    () => Object.fromEntries((analytics?.cycle_components || []).map((cycle) => [cycle.root, cycle.breaking_link || null])),
+    [analytics]
+  );
+  const selfLoopEntries = analytics?.self_loops || [];
+  const disconnectedComponents = analytics?.disconnected_components || 0;
 
-  // Use a ref so handleSubmit always sees latest input without re-creating
-  const inputRef = useRef(input);
-  inputRef.current = input;
   const parsedRef = useRef(parsedLines);
   parsedRef.current = parsedLines;
 
-  // Extract cycle paths for all cyclic components
-  const cyclePaths = useMemo(() => {
-    if (!response) return {};
-    const paths = {};
-    for (const h of response.hierarchies) {
-      if (h.has_cycle) {
-        const cp = extractCyclePath(parsedRef.current);
-        if (cp) paths[h.root] = cp;
-      }
-    }
-    return paths;
-  }, [response]);
-
   // Complexity estimate
   const complexity = useMemo(() => {
+    if (analytics?.parser) {
+      const { vertices, edges } = analytics.parser;
+      return { V: vertices, E: edges, total: vertices + edges };
+    }
     const { nodeCount, edgeCount } = liveAnalysis;
     return { V: nodeCount, E: edgeCount, total: nodeCount + edgeCount };
-  }, [liveAnalysis]);
+  }, [analytics, liveAnalysis]);
+
+  const selectedComponent = selectedRoot ? componentByRoot[selectedRoot] : null;
+  const playbackOrder =
+    selectedComponent?.type === "tree"
+      ? selectedComponent.traversal?.[traversalMode] || []
+      : [];
+  const playbackNodes = useMemo(
+    () => new Set(playbackOrder.slice(0, playbackStep + 1)),
+    [playbackOrder, playbackStep]
+  );
+
+  const normalizedSearchNode = searchNode.trim().toUpperCase();
+  const searchContext = useMemo(() => {
+    if (!normalizedSearchNode) {
+      return null;
+    }
+
+    const detail = componentDetails.find((component) => component.nodes?.includes(normalizedSearchNode));
+
+    if (!detail) {
+      return null;
+    }
+
+    const lineage = detail.lineage?.[normalizedSearchNode] || [normalizedSearchNode];
+    return {
+      root: detail.root,
+      nodes: new Set(lineage),
+      edges: new Set(lineage.slice(1).map((node, index) => `${lineage[index]}->${node}`)),
+    };
+  }, [componentDetails, normalizedSearchNode]);
+
+  const pathNodes = useMemo(() => new Set(pathResult), [pathResult]);
+  const pathEdges = useMemo(
+    () => new Set(pathResult.slice(1).map((node, index) => `${pathResult[index]}->${node}`)),
+    [pathResult]
+  );
 
   const handleSubmit = useCallback(async (event) => {
     if (event) event.preventDefault();
@@ -564,20 +951,6 @@ export default function HomePage() {
     setStatus("File loaded.");
   }
 
-  function handleAutoFill() {
-    setInput(SAMPLE_DATA); setResponse(null); setError(""); setCopyToast("");
-    setStatus("Sample loaded. Submitting…");
-    setAutoSubmit(true);
-  }
-
-  useEffect(() => {
-    if (autoSubmit && input === SAMPLE_DATA) {
-      setAutoSubmit(false);
-      const t = setTimeout(() => handleSubmit(), 300);
-      return () => clearTimeout(t);
-    }
-  }, [autoSubmit, input, handleSubmit]);
-
   useEffect(() => {
     function onKey(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); handleSubmit(); }
@@ -587,10 +960,131 @@ export default function HomePage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleSubmit]);
 
+  useEffect(() => {
+    if (renderableTrees.length > 0) {
+      setSelectedRoot((current) => {
+        if (current && componentByRoot[current]) {
+          return current;
+        }
+        return renderableTrees[0].root;
+      });
+    } else {
+      setSelectedRoot(null);
+    }
+
+    setPlaybackActive(false);
+    setPlaybackStep(-1);
+    setPathResult([]);
+    setPathStatus("");
+  }, [renderableTrees, componentByRoot]);
+
+  useEffect(() => {
+    if (searchContext?.root) {
+      setSelectedRoot(searchContext.root);
+    }
+  }, [searchContext]);
+
+  useEffect(() => {
+    setPlaybackActive(false);
+    setPlaybackStep(-1);
+  }, [selectedRoot, traversalMode]);
+
+  useEffect(() => {
+    if (!playbackActive || playbackOrder.length === 0) {
+      return undefined;
+    }
+
+    if (playbackStep >= playbackOrder.length - 1) {
+      setPlaybackActive(false);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setPlaybackStep((current) => current + 1);
+    }, 650);
+
+    return () => window.clearTimeout(timer);
+  }, [playbackActive, playbackOrder, playbackStep]);
+
   function handleNavClick(item) {
     setActiveNav(item.key); setSidebarOpen(false);
     const el = document.getElementById(item.targetId);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handlePlaybackToggle() {
+    if (!playbackOrder.length) {
+      return;
+    }
+
+    if (playbackStep < 0 || playbackStep >= playbackOrder.length - 1) {
+      setPlaybackStep(0);
+    }
+
+    setPlaybackActive((current) => !current);
+  }
+
+  function handlePlaybackReset() {
+    setPlaybackActive(false);
+    setPlaybackStep(-1);
+  }
+
+  function handleFindPath() {
+    if (!pathFrom || !pathTo) {
+      setPathStatus("Choose both start and end nodes.");
+      setPathResult([]);
+      return;
+    }
+
+    const result = findShortestPath(acceptedGraph.adjacency, pathFrom, pathTo);
+    setPathResult(result);
+
+    if (result.length > 0) {
+      const matchingComponent = componentDetails.find((component) => result.every((node) => component.nodes?.includes(node)));
+      if (matchingComponent) {
+        setSelectedRoot(matchingComponent.root);
+      }
+      setPathStatus(`Shortest path: ${result.join(" → ")}`);
+    } else {
+      setPathStatus("No directed path found for the selected nodes.");
+    }
+  }
+
+  function handleClearPath() {
+    setPathResult([]);
+    setPathStatus("");
+    setPathFrom("");
+    setPathTo("");
+  }
+
+  function handleDownloadMermaid() {
+    if (!analytics?.accepted_edges?.length) {
+      return;
+    }
+
+    const mermaidSource = buildMermaidGraph(analytics.accepted_edges);
+    const blob = new Blob([mermaidSource], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "hierarchy-intelligence.mmd";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function registerSvgRef(root, element) {
+    if (!root) {
+      return;
+    }
+    treeSvgRefs.current[root] = element;
+  }
+
+  function handleDownloadSelectedPng() {
+    if (!selectedRoot || !treeSvgRefs.current[selectedRoot]) {
+      return;
+    }
+
+    serializeSvgToPng(treeSvgRefs.current[selectedRoot], `${selectedRoot}-${viewMode}.png`);
   }
 
   const responseIdentity = formatIdentityDisplay(response?.user_id || USER_PROFILE.user_id);
@@ -612,6 +1106,33 @@ export default function HomePage() {
 
   const displayedInvalid = response ? response.invalid_entries : liveAnalysis.invalidEntries;
   const displayedDuplicates = response ? response.duplicate_edges : liveAnalysis.duplicateEdges;
+
+  function buildHighlightStateForRoot(root) {
+    const nodes = new Set();
+    const edges = new Set();
+
+    if (selectedRoot === root) {
+      playbackNodes.forEach((node) => nodes.add(node));
+    }
+
+    if (searchContext?.root === root) {
+      searchContext.nodes.forEach((node) => nodes.add(node));
+      searchContext.edges.forEach((edge) => edges.add(edge));
+    }
+
+    const component = componentByRoot[root];
+    const pathWithinComponent =
+      pathResult.length > 0 &&
+      component?.nodes &&
+      pathResult.every((node) => component.nodes.includes(node));
+
+    if (pathWithinComponent) {
+      pathNodes.forEach((node) => nodes.add(node));
+      pathEdges.forEach((edge) => edges.add(edge));
+    }
+
+    return { nodes, edges };
+  }
 
   return (
     <main className="dashboard-shell">
@@ -728,14 +1249,11 @@ export default function HomePage() {
                   <p className="panel-kicker">Input</p>
                   <h2>Edge Submission</h2>
                 </div>
-                <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
-                  <button type="button" className="auto-fill-button" onClick={handleAutoFill}>⚡ Auto-Fill</button>
-                  <span className="panel-pill">
-                    {totalParsedLines > 0
-                      ? <span className="live-count-badge" key={totalParsedLines}>{totalParsedLines}</span>
-                      : "0"}
-                  </span>
-                </div>
+                <span className="panel-pill">
+                  {totalParsedLines > 0
+                    ? <span className="live-count-badge" key={totalParsedLines}>{totalParsedLines}</span>
+                    : "0"}
+                </span>
               </div>
 
               <form className="form-layout" onSubmit={handleSubmit}>
@@ -842,6 +1360,21 @@ export default function HomePage() {
                     </div>
                   ) : <p className="empty-state">None</p>}
                 </div>
+                <div className="detail-box">
+                  <p className="detail-title">
+                    ◎ Self-Loops{" "}
+                    {selfLoopEntries.length > 0 && (
+                      <span className="count-chip count-red">{selfLoopEntries.length}</span>
+                    )}
+                  </p>
+                  {selfLoopEntries.length > 0 ? (
+                    <div className="token-list">
+                      {selfLoopEntries.map((entry, i) => (
+                        <span className="token error-token" key={`${entry}-loop-${i}`}>{entry}</span>
+                      ))}
+                    </div>
+                  ) : <p className="empty-state">None</p>}
+                </div>
               </div>
             </article>
             )}
@@ -867,24 +1400,144 @@ export default function HomePage() {
                           {response.summary.total_cycles} cycle{response.summary.total_cycles !== 1 ? "s" : ""}
                         </span>
                       )}
+                      <span className="tag-pill tag-cyan">
+                        {disconnectedComponents} component{disconnectedComponents !== 1 ? "s" : ""}
+                      </span>
                     </>
-                  )}
-                  {!showHierarchyFallback && (
-                    <div className="mode-toggle">
-                      <button
-                        type="button"
-                        className={`mode-btn ${treeMode === "dfs" ? "active" : ""}`}
-                        onClick={() => setTreeMode("dfs")}
-                      >DFS</button>
-                      <button
-                        type="button"
-                        className={`mode-btn ${treeMode === "bfs" ? "active" : ""}`}
-                        onClick={() => setTreeMode("bfs")}
-                      >BFS</button>
-                    </div>
                   )}
                 </div>
               </div>
+
+              {response && (
+                <div className="insight-toolbar">
+                  <div className="insight-row">
+                    <div className="insight-field">
+                      <label htmlFor="node-search">Search Node</label>
+                      <input
+                        id="node-search"
+                        className="control-input"
+                        value={searchNode}
+                        onChange={(event) => setSearchNode(event.target.value.toUpperCase().slice(0, 1))}
+                        placeholder="A"
+                      />
+                    </div>
+                    <div className="insight-field">
+                      <label htmlFor="selected-root">Debugger Root</label>
+                      <select
+                        id="selected-root"
+                        className="control-select"
+                        value={selectedRoot || ""}
+                        onChange={(event) => setSelectedRoot(event.target.value)}
+                      >
+                        {renderableTrees.map((tree) => (
+                          <option key={tree.root} value={tree.root}>{tree.root}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="insight-field insight-grow">
+                      <label>View Mode</label>
+                      <div className="mode-toggle">
+                        {["vertical", "radial", "force"].map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            className={`mode-btn ${viewMode === mode ? "active" : ""}`}
+                            onClick={() => setViewMode(mode)}
+                          >
+                            {mode === "vertical" ? "Tree" : mode === "radial" ? "Radial" : "Force"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="insight-row">
+                    <div className="insight-field">
+                      <label htmlFor="path-from">Path From</label>
+                      <select
+                        id="path-from"
+                        className="control-select"
+                        value={pathFrom}
+                        onChange={(event) => setPathFrom(event.target.value)}
+                      >
+                        <option value="">Select</option>
+                        {allGraphNodes.map((node) => (
+                          <option key={`from-${node}`} value={node}>{node}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="insight-field">
+                      <label htmlFor="path-to">Path To</label>
+                      <select
+                        id="path-to"
+                        className="control-select"
+                        value={pathTo}
+                        onChange={(event) => setPathTo(event.target.value)}
+                      >
+                        <option value="">Select</option>
+                        {allGraphNodes.map((node) => (
+                          <option key={`to-${node}`} value={node}>{node}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="insight-field insight-grow">
+                      <label>Playback</label>
+                      <div className="mode-toggle">
+                        <button
+                          type="button"
+                          className={`mode-btn ${traversalMode === "dfs" ? "active" : ""}`}
+                          onClick={() => setTraversalMode("dfs")}
+                        >
+                          DFS
+                        </button>
+                        <button
+                          type="button"
+                          className={`mode-btn ${traversalMode === "bfs" ? "active" : ""}`}
+                          onClick={() => setTraversalMode("bfs")}
+                        >
+                          BFS
+                        </button>
+                        <button type="button" className="mode-btn" onClick={handlePlaybackToggle} disabled={!playbackOrder.length}>
+                          {playbackActive ? "Pause" : "Play"}
+                        </button>
+                        <button type="button" className="mode-btn" onClick={handlePlaybackReset} disabled={!playbackOrder.length}>
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="insight-row insight-actions-row">
+                    <div className="toolbar-actions">
+                      <button type="button" className="secondary-button" onClick={handleFindPath} disabled={!response}>
+                        Find Path
+                      </button>
+                      <button type="button" className="secondary-button" onClick={handleClearPath} disabled={!pathResult.length && !pathStatus}>
+                        Clear Path
+                      </button>
+                      <button type="button" className="secondary-button" onClick={handleDownloadSelectedPng} disabled={!selectedRoot || !treeSvgRefs.current[selectedRoot]}>
+                        Export PNG
+                      </button>
+                      <button type="button" className="secondary-button" onClick={handleDownloadMermaid} disabled={!analytics?.accepted_edges?.length}>
+                        Export Mermaid
+                      </button>
+                    </div>
+                    <div className="insight-feedback">
+                      {pathStatus && <span className="path-status">{pathStatus}</span>}
+                      {searchContext?.root && (
+                        <span className="path-status">
+                          Lineage focus: {normalizedSearchNode} in root {searchContext.root}
+                        </span>
+                      )}
+                      {selectedRoot && playbackOrder.length > 0 && (
+                        <span className="path-status">
+                          {traversalMode.toUpperCase()} playback {playbackStep >= 0 ? `${Math.min(playbackStep + 1, playbackOrder.length)}/${playbackOrder.length}` : `0/${playbackOrder.length}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="hierarchy-list">
                 {isLoading ? (
@@ -912,6 +1565,14 @@ export default function HomePage() {
                             <div className="token-list">{displayedDuplicates.map((e, i) => <span className="token warning-token" key={`${e}-${i}`}>{e}</span>)}</div>
                           ) : <p className="empty-state">None</p>}
                         </div>
+                        <div className="detail-box">
+                          <p className="detail-title">◎ Self-Loops{" "}
+                            {selfLoopEntries.length > 0 && <span className="count-chip count-red">{selfLoopEntries.length}</span>}
+                          </p>
+                          {selfLoopEntries.length > 0 ? (
+                            <div className="token-list">{selfLoopEntries.map((e, i) => <span className="token error-token" key={`${e}-fallback-${i}`}>{e}</span>)}</div>
+                          ) : <p className="empty-state">None</p>}
+                        </div>
                       </div>
                     </section>
                     <section className="fallback-block">
@@ -934,13 +1595,22 @@ export default function HomePage() {
                     </section>
                   </div>
                 ) : (
-                  response.hierarchies.map((h) => (
-                    <div className="hierarchy-card" key={h.root}>
+                  response.hierarchies.map((h) => {
+                    const highlightState = buildHighlightStateForRoot(h.root);
+                    const isSelectedRoot = selectedRoot === h.root;
+                    return (
+                    <div
+                      className={`hierarchy-card ${isSelectedRoot ? "selected-card" : ""}`}
+                      key={h.root}
+                      onClick={() => setSelectedRoot(h.root)}
+                    >
                       <div className="hierarchy-topline">
                         <div>
                           <p className="hierarchy-title">Root: {h.root}</p>
                           <p className="hierarchy-subtitle">
-                            {h.has_cycle ? "Cycle detected" : `Depth: ${h.depth}`}
+                            {h.has_cycle
+                              ? `Cycle detected${breakingLinks[h.root] ? ` · break ${breakingLinks[h.root]}` : ""}`
+                              : `Depth: ${h.depth}`}
                           </p>
                         </div>
                         <span className={`badge ${h.has_cycle ? "cycle" : ""}`}>
@@ -952,9 +1622,16 @@ export default function HomePage() {
                         subtree={h.tree}
                         hasCycle={h.has_cycle}
                         cyclePath={cyclePaths[h.root] || null}
+                        breakingLink={breakingLinks[h.root] || null}
+                        viewMode={viewMode}
+                        playbackNodes={isSelectedRoot ? playbackNodes : new Set()}
+                        highlightNodes={highlightState.nodes}
+                        highlightEdges={highlightState.edges}
+                        registerSvgRef={registerSvgRef}
                       />
                     </div>
-                  ))
+                  );
+                  })
                 )}
               </div>
             </article>
@@ -989,6 +1666,7 @@ export default function HomePage() {
                   <div className="json-header-actions">
                     <button type="button" className="secondary-button" onClick={handleCopyJson} disabled={!response}>Copy</button>
                     <button type="button" className="secondary-button" onClick={handleDownloadJson} disabled={!response}>↓ Download</button>
+                    <button type="button" className="secondary-button" onClick={handleDownloadMermaid} disabled={!analytics?.accepted_edges?.length}>Mermaid</button>
                   </div>
                 </div>
                 {copyToast && <p className="copy-toast">✓ {copyToast}</p>}
@@ -998,7 +1676,7 @@ export default function HomePage() {
                   <pre className="json-output" dangerouslySetInnerHTML={{
                     __html: jsonString
                       ? syntaxHighlightJson(JSON.stringify(response, null, 2))
-                      : '<span style="color:var(--text-dim);font-style:italic">// Click ⚡ Auto-Fill or enter edges to see response.</span>',
+                      : '<span style="color:var(--text-dim);font-style:italic">// Enter edges manually or drop a CSV/JSON file to see response.</span>',
                   }} />
                 )}
               </article>

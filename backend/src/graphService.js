@@ -11,6 +11,7 @@ function normalizeEntry(entry) {
 function parseValidEdges(entries) {
   const invalidEntries = [];
   const duplicateEdges = [];
+  const selfLoops = [];
   const seenEdges = new Set();
   const duplicateEdgeSet = new Set();
   const acceptedEdges = [];
@@ -29,6 +30,7 @@ function parseValidEdges(entries) {
 
     if (from === to) {
       invalidEntries.push(normalizedEntry);
+      selfLoops.push(normalizedEntry);
       continue;
     }
 
@@ -48,13 +50,81 @@ function parseValidEdges(entries) {
     }
 
     childToParent.set(to, from);
-    acceptedEdges.push({ from, to });
+    acceptedEdges.push({
+      from,
+      to,
+      label: `${from}->${to}`,
+    });
   }
 
   return {
     acceptedEdges,
     invalidEntries,
     duplicateEdges,
+    selfLoops,
+  };
+}
+
+function buildGraph(acceptedEdges) {
+  const adjacency = new Map();
+  const reverseAdjacency = new Map();
+  const nodes = new Set();
+  const inDegree = new Map();
+
+  for (const { from, to } of acceptedEdges) {
+    nodes.add(from);
+    nodes.add(to);
+
+    if (!adjacency.has(from)) {
+      adjacency.set(from, []);
+    }
+
+    if (!adjacency.has(to)) {
+      adjacency.set(to, []);
+    }
+
+    if (!reverseAdjacency.has(from)) {
+      reverseAdjacency.set(from, []);
+    }
+
+    if (!reverseAdjacency.has(to)) {
+      reverseAdjacency.set(to, []);
+    }
+
+    adjacency.get(from).push(to);
+    reverseAdjacency.get(to).push(from);
+    inDegree.set(to, (inDegree.get(to) || 0) + 1);
+
+    if (!inDegree.has(from)) {
+      inDegree.set(from, 0);
+    }
+  }
+
+  for (const node of nodes) {
+    if (!adjacency.has(node)) {
+      adjacency.set(node, []);
+    }
+
+    if (!reverseAdjacency.has(node)) {
+      reverseAdjacency.set(node, []);
+    }
+  }
+
+  for (const [node, children] of adjacency.entries()) {
+    children.sort();
+    adjacency.set(node, children);
+  }
+
+  for (const [node, parents] of reverseAdjacency.entries()) {
+    parents.sort();
+    reverseAdjacency.set(node, parents);
+  }
+
+  return {
+    nodes,
+    adjacency,
+    reverseAdjacency,
+    inDegree,
   };
 }
 
@@ -102,38 +172,111 @@ function buildConnectedComponents(adjacency, nodes) {
   return components;
 }
 
-function detectCycleInComponent(adjacency, componentNodeSet) {
-  const visitState = new Map();
+function tarjanStronglyConnectedComponents(adjacency, nodes) {
+  let index = 0;
+  const stack = [];
+  const stackSet = new Set();
+  const indexes = new Map();
+  const lowLinks = new Map();
+  const components = [];
+
+  function strongConnect(node) {
+    indexes.set(node, index);
+    lowLinks.set(node, index);
+    index += 1;
+    stack.push(node);
+    stackSet.add(node);
+
+    for (const child of adjacency.get(node) || []) {
+      if (!indexes.has(child)) {
+        strongConnect(child);
+        lowLinks.set(node, Math.min(lowLinks.get(node), lowLinks.get(child)));
+      } else if (stackSet.has(child)) {
+        lowLinks.set(node, Math.min(lowLinks.get(node), indexes.get(child)));
+      }
+    }
+
+    if (lowLinks.get(node) === indexes.get(node)) {
+      const component = [];
+      let current = null;
+
+      while (current !== node) {
+        current = stack.pop();
+        stackSet.delete(current);
+        component.push(current);
+      }
+
+      components.push(component.sort());
+    }
+  }
+
+  for (const node of [...nodes].sort()) {
+    if (!indexes.has(node)) {
+      strongConnect(node);
+    }
+  }
+
+  return components.sort((left, right) => left[0].localeCompare(right[0]));
+}
+
+function extractCyclePathForComponent(adjacency, componentNodes) {
+  const componentNodeSet = new Set(componentNodes);
+  const visited = new Set();
+  const inStack = new Set();
+  const path = [];
+  let cyclePath = null;
 
   function dfs(node) {
-    visitState.set(node, 1);
+    if (cyclePath) {
+      return;
+    }
+
+    visited.add(node);
+    inStack.add(node);
+    path.push(node);
 
     for (const child of adjacency.get(node) || []) {
       if (!componentNodeSet.has(child)) {
         continue;
       }
 
-      const state = visitState.get(child) || 0;
-      if (state === 1) {
-        return true;
+      if (cyclePath) {
+        return;
       }
 
-      if (state === 0 && dfs(child)) {
-        return true;
+      if (inStack.has(child)) {
+        const cycleStartIndex = path.indexOf(child);
+        cyclePath = [...path.slice(cycleStartIndex), child];
+        return;
+      }
+
+      if (!visited.has(child)) {
+        dfs(child);
       }
     }
 
-    visitState.set(node, 2);
-    return false;
+    path.pop();
+    inStack.delete(node);
   }
 
-  for (const node of [...componentNodeSet].sort()) {
-    if ((visitState.get(node) || 0) === 0 && dfs(node)) {
-      return true;
+  for (const node of [...componentNodes].sort()) {
+    if (!visited.has(node) && !cyclePath) {
+      dfs(node);
     }
   }
 
-  return false;
+  return cyclePath;
+}
+
+function chooseBreakingLink(cyclePath) {
+  if (!Array.isArray(cyclePath) || cyclePath.length < 2) {
+    return null;
+  }
+
+  const from = cyclePath[cyclePath.length - 2];
+  const to = cyclePath[cyclePath.length - 1];
+
+  return `${from}->${to}`;
 }
 
 function buildTreeStructure(root, adjacency) {
@@ -145,6 +288,7 @@ function buildTreeStructure(root, adjacency) {
     }
 
     const branch = {};
+
     for (const child of children) {
       branch[child] = walk(child);
     }
@@ -171,6 +315,7 @@ function calculateDepth(root, adjacency) {
     }
 
     let longest = 0;
+
     for (const child of children) {
       longest = Math.max(longest, dfs(child));
     }
@@ -183,68 +328,131 @@ function calculateDepth(root, adjacency) {
   return dfs(root);
 }
 
-function buildHierarchyResponse(acceptedEdges) {
-  const adjacency = new Map();
-  const nodes = new Set();
-  const inDegree = new Map();
+function buildTraversalOrders(root, adjacency) {
+  const dfsOrder = [];
+  const bfsOrder = [];
 
-  for (const { from, to } of acceptedEdges) {
-    nodes.add(from);
-    nodes.add(to);
+  function dfs(node) {
+    dfsOrder.push(node);
 
-    if (!adjacency.has(from)) {
-      adjacency.set(from, []);
-    }
-    if (!adjacency.has(to)) {
-      adjacency.set(to, []);
-    }
-
-    adjacency.get(from).push(to);
-    inDegree.set(to, (inDegree.get(to) || 0) + 1);
-    if (!inDegree.has(from)) {
-      inDegree.set(from, 0);
+    for (const child of adjacency.get(node) || []) {
+      dfs(child);
     }
   }
 
-  for (const [node, children] of adjacency.entries()) {
-    children.sort();
-    adjacency.set(node, children);
+  const queue = [root];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    bfsOrder.push(current);
+
+    for (const child of adjacency.get(current) || []) {
+      queue.push(child);
+    }
   }
 
+  dfs(root);
+
+  return {
+    dfs: dfsOrder,
+    bfs: bfsOrder,
+  };
+}
+
+function buildLineageIndex(root, adjacency) {
+  const lineageByNode = {};
+
+  function walk(node, trail) {
+    const nextTrail = [...trail, node];
+    lineageByNode[node] = nextTrail;
+
+    for (const child of adjacency.get(node) || []) {
+      walk(child, nextTrail);
+    }
+  }
+
+  walk(root, []);
+  return lineageByNode;
+}
+
+function buildHierarchyResponse(acceptedEdges, selfLoops) {
+  const { nodes, adjacency, reverseAdjacency, inDegree } = buildGraph(acceptedEdges);
   const components = buildConnectedComponents(adjacency, nodes);
+  const stronglyConnectedComponents = tarjanStronglyConnectedComponents(adjacency, nodes);
   const hierarchies = [];
+  const componentDetails = [];
+  const cycleComponents = [];
   let totalTrees = 0;
   let totalCycles = 0;
   let largestTreeRoot = null;
   let largestTreeDepth = -1;
 
   for (const componentNodes of components) {
-    const componentNodeSet = new Set(componentNodes);
     const roots = componentNodes.filter((node) => (inDegree.get(node) || 0) === 0);
-    const hasCycle = detectCycleInComponent(adjacency, componentNodeSet);
+    const componentSccs = stronglyConnectedComponents.filter((component) =>
+      component.every((node) => componentNodes.includes(node))
+    );
+    const cyclicSccs = componentSccs.filter((component) => component.length > 1);
+    const hasCycle = cyclicSccs.length > 0;
+    const root =
+      roots.length > 0
+        ? [...roots].sort()[0]
+        : [...componentNodes].sort()[0];
+    const componentEdges = acceptedEdges
+      .filter(({ from, to }) => componentNodes.includes(from) && componentNodes.includes(to))
+      .map(({ label }) => label)
+      .sort();
 
     if (hasCycle) {
-      const root =
-        roots.length > 0
-          ? [...roots].sort()[0]
-          : [...componentNodes].sort()[0];
+      const cyclePath = extractCyclePathForComponent(adjacency, componentNodes);
+      const breakingLink = chooseBreakingLink(cyclePath);
+
       hierarchies.push({
         root,
         tree: {},
         has_cycle: true,
       });
+
+      componentDetails.push({
+        root,
+        type: "cycle",
+        nodes: componentNodes,
+        edges: componentEdges,
+        strongly_connected_components: cyclicSccs,
+        cycle_path: cyclePath,
+        breaking_link: breakingLink,
+      });
+
+      cycleComponents.push({
+        root,
+        nodes: componentNodes,
+        cycle_path: cyclePath,
+        breaking_link: breakingLink,
+      });
+
       totalCycles += 1;
       continue;
     }
 
-    const root = roots[0];
     const depth = calculateDepth(root, adjacency);
     const tree = buildTreeStructure(root, adjacency);
+    const traversal = buildTraversalOrders(root, adjacency);
+    const lineage = buildLineageIndex(root, adjacency);
 
     hierarchies.push({
       root,
       tree,
       depth,
+    });
+
+    componentDetails.push({
+      root,
+      type: "tree",
+      nodes: componentNodes,
+      edges: componentEdges,
+      depth,
+      traversal,
+      lineage,
     });
 
     totalTrees += 1;
@@ -259,6 +467,8 @@ function buildHierarchyResponse(acceptedEdges) {
   }
 
   hierarchies.sort((left, right) => left.root.localeCompare(right.root));
+  componentDetails.sort((left, right) => left.root.localeCompare(right.root));
+  cycleComponents.sort((left, right) => left.root.localeCompare(right.root));
 
   return {
     hierarchies,
@@ -266,6 +476,22 @@ function buildHierarchyResponse(acceptedEdges) {
       total_trees: totalTrees,
       total_cycles: totalCycles,
       largest_tree_root: largestTreeRoot,
+    },
+    analytics: {
+      accepted_edges: acceptedEdges.map(({ label }) => label),
+      self_loops: selfLoops,
+      disconnected_components: components.length,
+      connected_components: componentDetails,
+      cycle_components: cycleComponents,
+      strongly_connected_components: stronglyConnectedComponents,
+      parser: {
+        vertices: nodes.size,
+        edges: acceptedEdges.length,
+        complexity: `O(${nodes.size}+${acceptedEdges.length})`,
+      },
+      reverse_adjacency: Object.fromEntries(
+        [...reverseAdjacency.entries()].map(([node, parents]) => [node, parents])
+      ),
     },
   };
 }
@@ -279,17 +505,21 @@ function processGraphPayload(payload) {
     throw error;
   }
 
-  const { acceptedEdges, invalidEntries, duplicateEdges } = parseValidEdges(inputData);
-  const { hierarchies, summary } = buildHierarchyResponse(acceptedEdges);
+  const { acceptedEdges, invalidEntries, duplicateEdges, selfLoops } = parseValidEdges(inputData);
+  const { hierarchies, summary, analytics } = buildHierarchyResponse(acceptedEdges, selfLoops);
 
   return {
     hierarchies,
     invalid_entries: invalidEntries,
     duplicate_edges: duplicateEdges,
     summary,
+    analytics,
   };
 }
 
 module.exports = {
+  normalizeEntry,
+  parseValidEdges,
+  tarjanStronglyConnectedComponents,
   processGraphPayload,
 };
